@@ -1,0 +1,19 @@
+[package]
+name = "dephy-dsproxy-controller"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+clap = { workspace = true }
+dephy-balance-payment-sdk = { workspace = true }
+futures = { workspace = true }
+nostr = { workspace = true }
+nostr-sdk = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["process", "rt-multi-thread"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
