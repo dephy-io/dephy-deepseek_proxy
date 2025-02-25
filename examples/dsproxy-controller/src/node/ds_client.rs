@@ -2,7 +2,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error};
 
-const API_BASE_URL: &str = "https://api.ppinfra.com/v3/openai/chat/completions";
+const API_BASE_URL: &str = "https://api.ppinfra.com/v3/openai";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AskMessage {

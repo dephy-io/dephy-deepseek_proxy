@@ -40,11 +40,11 @@ mkdir data
 ```
 
 ```shell
-cargo run --bin dephy-gacha-controller -- --nostr-relay ws://127.0.0.1:8000 --machine-pubkeys 91550af28891a6ac6c73e0d415ed5ee9ea5603ef6d276df623a8b80254519ab2 --admin-pubkey <the pubkey of your private nostr key or use random one> --solana-rpc-url https://api.devnet.solana.com
+cargo run --bin dephy-gacha-controller -- --nostr-relay ws://127.0.0.1:8000 --machine-pubkeys d041ea9854f2117b82452457c4e6d6593a96524027cd4032d2f40046deb78d93 --admin-pubkey <the pubkey of your private nostr key or use random one> --solana-rpc-url https://api.devnet.solana.com
 ```
 
 ## Cli Example (it simulates the process of inserting a coin)
 
 ```shell
-cargo run --example cli -- --nostr-relay ws://127.0.0.1:8000 --machine-pubkey 91550af28891a6ac6c73e0d415ed5ee9ea5603ef6d276df623a8b80254519ab2 --user <user solana address> --nonce <nonce of recover info> --recover-info <recover info>
+cargo run --example cli -- --nostr-relay ws://127.0.0.1:8000 --machine-pubkey d041ea9854f2117b82452457c4e6d6593a96524027cd4032d2f40046deb78d93 --user <user solana address> --nonce <nonce of recover info> --recover-info <recover info>
 ```

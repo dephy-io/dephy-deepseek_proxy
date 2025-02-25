@@ -9,9 +9,26 @@ import toast from 'react-hot-toast'
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure'
 import { Relay } from 'nostr-tools/relay'
 import bs58 from 'bs58'
+import ReactMarkdown from 'react-markdown'
 
 const SIGN_MESSAGE_PREFIX = 'DePHY vending machine/Example:\n'
 const RELAY_ENDPOINT = import.meta.env.VITE_RELAY_ENDPOINT || 'ws://127.0.0.1:8000'
+
+const MSG: Message[] = [
+  { role: 'user', content: '1+1=' },
+  {
+    role: 'assistant',
+    content: `<think> Okay, so the user asked "1+1=". Hmm, that's a basic math question. Let me think. Well, 1 plus 1 is one of the first things you learn in arithmetic. If I have one apple and someone gives me another apple, how many apples do I have? Two, right? So the answer should be 2. But wait, maybe there's a trick here. Sometimes people use base systems other than decimal, like binary. In binary, 1+1 equals 10. But the question doesn't specify the base, so I should assume it's base 10. Also, maybe the user is testing if I know the simplest answer. I don't see any context clues suggesting a different interpretation. So yeah, the answer is 2. Let me double-check. Yep, 1 plus 1 equals 2 in standard arithmetic. No complexities here. I'll go with that. </think>
+The result of 1 + 1 is 2. This follows from basic arithmetic addition, where combining one unit with another unit gives a total of two units.`,
+  },
+]
+
+interface Message {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+const MACHINE_PUBKEY = 'd041ea9854f2117b82452457c4e6d6593a96524027cd4032d2f40046deb78d93'
 
 // define charge status
 type ChargeStatus = 'idle' | 'requested' | 'working' | 'available' | 'error'
@@ -22,17 +39,12 @@ export default function BalancePaymentFeature() {
   const { program, getGlobalPubkey, getUserAccountPubkey, generate64ByteUUIDPayload } = useBalancePaymentProgram()
 
   const [selectedTab, setSelectedTab] = useState<'decharge' | 'gacha'>('decharge')
-  const [recoverInfo, setRecoverInfo] = useState<any>()
-  const [serialNumberStr, setSerialNumberStr] = useState<string | null>(null)
   const [serialNumberBytes, setSerialNumberBytes] = useState<Uint8Array | null>(null)
   const [globalAccount, setGlobalAccount] = useState<any>(null)
   const [userAccount, setUserAccount] = useState<any>(null)
   const [vaultBalance, setVaultBalance] = useState<number | null>(null)
   const [depositAmount, setDepositAmount] = useState<string>('')
   const [withdrawAmount, setWithdrawAmount] = useState<string>('')
-  const [machinePubkey, setMachinePubkey] = useState<string>(
-    'd041ea9854f2117b82452457c4e6d6593a96524027cd4032d2f40046deb78d93',
-  )
   const [relay, setRelay] = useState<Relay>()
   const [sk, setSk] = useState<Uint8Array | null>(null)
   const [chargeStatus, setChargeStatus] = useState<ChargeStatus>('idle')
@@ -41,11 +53,13 @@ export default function BalancePaymentFeature() {
   const [isChargeDisabled, setIsChargeDisabled] = useState(false)
   const isTabDisabled = chargeStatus !== 'idle' && chargeStatus !== 'available'
 
+  const [messages, setMessages] = useState<Message[]>(MSG)
+  const [input, setInput] = useState('')
+
   const subscriptionRef = useRef<any>(null)
 
   useEffect(() => {
-    const { uuid, uuidBytes } = generate64ByteUUIDPayload()
-    setSerialNumberStr(uuid)
+    const { uuidBytes } = generate64ByteUUIDPayload()
     setSerialNumberBytes(uuidBytes)
   }, [selectedTab])
 
@@ -228,7 +242,7 @@ export default function BalancePaymentFeature() {
         payload: Array.from(payload),
         deadline: deadline.toNumber(),
       }
-      setRecoverInfo(recoverInfo)
+      // setRecoverInfo(recoverInfo)
     } catch (error) {
       toast.error(`Error signing message: ${error}`)
       setIsChargeDisabled(false)
@@ -252,16 +266,18 @@ export default function BalancePaymentFeature() {
   }
 
   const handleAsk = async () => {
+    if (!input.trim()) return
+
+    const newMessages: Message[] = [...messages, { role: 'user', content: input }]
+    setMessages(newMessages)
+    setInput('')
+
     if (!publicKey) {
       console.error('Wallet not connected')
       return
     }
     if (!sk) {
       toast.error('sk not initialized')
-      return
-    }
-    if (!machinePubkey) {
-      toast.error('machinePubkey not initialized')
       return
     }
     if (!relay) {
@@ -273,7 +289,7 @@ export default function BalancePaymentFeature() {
       Ask: {
         name: publicKey.toString(),
         role: 'user',
-        content: '什么是内存泄漏？',
+        content: input,
       },
     }
 
@@ -284,22 +300,18 @@ export default function BalancePaymentFeature() {
       created_at: Math.floor(Date.now() / 1000),
       tags: [
         ['s', sTag],
-        ['p', machinePubkey],
+        ['p', MACHINE_PUBKEY],
       ],
       content,
     }
     const signedEvent = finalizeEvent(eventTemplate, sk)
-    const res = await relay.publish(signedEvent)
-    console.log("publish res:", res)
+    await relay.publish(signedEvent)
+    await listenFromRelay()
   }
 
   const publishToRelay = async (nonce: number, recoverInfo: any, user: string) => {
     if (!sk) {
       toast.error('sk not initialized')
-      return
-    }
-    if (!machinePubkey) {
-      toast.error('machinePubkey not initialized')
       return
     }
     if (!relay) {
@@ -330,7 +342,7 @@ export default function BalancePaymentFeature() {
       created_at: Math.floor(Date.now() / 1000),
       tags: [
         ['s', sTag],
-        ['p', machinePubkey],
+        ['p', MACHINE_PUBKEY],
       ],
       content,
     }
@@ -343,16 +355,12 @@ export default function BalancePaymentFeature() {
       toast.error('sk not initialized')
       return
     }
-    if (!machinePubkey) {
-      toast.error('machinePubkey not initialized')
-      return
-    }
     if (!relay) {
       toast.error('relay not initialized')
       return
     }
 
-    const sTag = selectedTab === 'decharge' ? 'dephy-decharge-controller' : 'dephy-gacha-controller'
+    const sTag = selectedTab === 'decharge' ? 'dephy-dsproxy-controller' : 'dephy-gacha-controller'
 
     // clear old subscription
     if (subscriptionRef.current) {
@@ -366,14 +374,15 @@ export default function BalancePaymentFeature() {
           kinds: [1573],
           since: Math.floor(Date.now() / 1000),
           '#s': [sTag],
-          '#p': [machinePubkey],
+          '#p': [MACHINE_PUBKEY],
         },
       ],
       {
         onevent: async (event) => {
           console.log('event received:', event)
+          setEvents((prevEvents) => [...prevEvents, event])
+          const content = JSON.parse(event.content)
           try {
-            const content = JSON.parse(event.content)
             if (content.Request) {
               setChargeStatus('requested')
             } else if (content.Status) {
@@ -383,8 +392,15 @@ export default function BalancePaymentFeature() {
                 setChargeStatus('available')
                 setIsChargeDisabled(false)
               }
+            } else if (content.Anwser) {
+              let text: string
+              if (content.Anwser.finish_reason !== 'stop') {
+                text = content.Anwser.finish_reason
+              } else {
+                text = content.Anwser.content
+              }
+              setMessages((prevMessages) => [...prevMessages, { role: content.Anwser.role, content: text }])
             }
-            setEvents((prevEvents) => [...prevEvents, event])
           } catch (error) {
             console.error('Error parsing event content:', error)
             setChargeStatus('error')
@@ -409,7 +425,7 @@ export default function BalancePaymentFeature() {
       subscriptionRef.current = null
     }
 
-    setRecoverInfo(null)
+    // setRecoverInfo(null)
     setEvents([])
     setChargeStatus('idle')
     setIsChargeDisabled(false)
@@ -615,9 +631,50 @@ export default function BalancePaymentFeature() {
         </div>
       </div>
 
-      <button className="btn btn-secondary w-full mt-4" onClick={handleAsk}>
-        Ask
-      </button>
+      <div className="p-4 flex flex-col h-[80vh]">
+        {/* 消息列表 */}
+        <div className="flex-1 overflow-auto space-y-4">
+          {messages.map((msg, index) => {
+            // 正则匹配 <think>...</think> 之间的文本
+            const parts = msg.content.split(/<think>(.*?)<\/think>/g)
+
+            return (
+              <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`p-3 max-w-md rounded-lg shadow ${msg.role === 'user' ? 'bg-blue-100' : 'bg-gray-100'}`}
+                >
+                  {parts.map((part, i) =>
+                    i % 2 === 0 ? (
+                      <ReactMarkdown key={i}>{part}</ReactMarkdown> // 正常文本
+                    ) : (
+                      <span key={i} className="text-xs text-gray-500 block leading-tight mb-2">
+                        {'>>'}
+                        {/* 灰色小字 */}
+                        {part}
+                      </span>
+                    ),
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* 输入框和按钮 */}
+        <div className="mt-4 flex items-center border-t pt-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
+            className="flex-1 p-2 border rounded-lg"
+            placeholder="输入消息..."
+          />
+          <button onClick={handleAsk} className="ml-2 px-4 py-2 bg-blue-500 text-white rounded-lg">
+            Ask
+          </button>
+        </div>
+      </div>
 
       <div className="mb-8 p-4 bg-base-200 rounded-lg shadow-md">
         <h2 className="text-xl font-bold mb-4">{selectedTab === 'decharge' ? 'Charge' : 'Gacha'}</h2>
@@ -633,24 +690,6 @@ export default function BalancePaymentFeature() {
           </button>
         )}
 
-        {serialNumberBytes && (
-          <div className="mt-4 p-4 bg-base-100 rounded-lg shadow-md">
-            <h2 className="text-xl font-bold mb-2">Charger Serial Number</h2>
-            <p className="break-all">{serialNumberStr}</p>
-          </div>
-        )}
-
-        <div className="mt-4 p-4 bg-base-100 rounded-lg shadow-md">
-          <h2 className="text-xl font-bold mb-2">Machine Pubkey</h2>
-          <input
-            type="text"
-            placeholder="Enter Machine Pubkey"
-            value={machinePubkey || ''}
-            onChange={(e) => setMachinePubkey(e.target.value)}
-            className="input input-bordered w-full placeholder:text-sm mt-4"
-          />
-        </div>
-
         <button
           className={`btn btn-primary w-full mt-4 border-none ${
             selectedTab === 'decharge'
@@ -658,29 +697,10 @@ export default function BalancePaymentFeature() {
               : 'bg-pink-500 hover:bg-pink-600 text-white'
           }`}
           onClick={handleCharge}
-          disabled={!wallet || !serialNumberBytes || !machinePubkey || isChargeDisabled || chargeStatus !== 'idle'}
+          disabled={!wallet || !serialNumberBytes || isChargeDisabled || chargeStatus !== 'idle'}
         >
           {selectedTab === 'decharge' ? 'Start Charge' : 'Play Gacha'}
         </button>
-
-        {recoverInfo && (
-          <div className="mt-6 p-6 bg-base-100 rounded-lg shadow-md">
-            <h2 className="text-xl font-bold mb-4">Recover Info</h2>
-            <div className="space-y-2">
-              <p>
-                <span className="font-semibold">Signature:</span>{' '}
-                <span className="break-all">{recoverInfo.signature.join(', ')}</span>
-              </p>
-              <p>
-                <span className="font-semibold">Payload:</span>{' '}
-                <span className="break-all">{recoverInfo.payload.join(', ')}</span>
-              </p>
-              <p>
-                <span className="font-semibold">Deadline:</span> <span>{recoverInfo.deadline.toString()}</span>
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   ) : (

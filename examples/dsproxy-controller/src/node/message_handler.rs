@@ -8,11 +8,11 @@ use nostr::RelayMessage;
 use nostr::Timestamp;
 use nostr_sdk::RelayPoolNotification;
 
-use crate::message::DephyGachaMessage;
-use crate::message::DephyGachaMessageRequestPayload;
-use crate::message::DephyGachaMessageStatusPayload;
-use crate::message::DephyGachaStatus;
-use crate::message::DephyGachaStatusReason;
+use crate::message::DephyDsProxyMessage;
+use crate::message::DephyDsProxyMessageRequestPayload;
+use crate::message::DephyDsProxyMessageStatusPayload;
+use crate::message::DephyDsProxyStatus;
+use crate::message::DephyDsProxyStatusReason;
 use crate::node::ds_client::AskMessage;
 use crate::relay_client::extract_mention;
 use crate::RelayClient;
@@ -41,7 +41,7 @@ pub enum Error {
 pub struct Machine {
     #[allow(dead_code)]
     pubkey: PublicKey,
-    status: DephyGachaStatus,
+    status: DephyDsProxyStatus,
     initial_request: Option<EventId>,
 }
 
@@ -74,7 +74,7 @@ impl MessageHandler {
                     pubkey,
                     Machine {
                         pubkey,
-                        status: DephyGachaStatus::Available,
+                        status: DephyDsProxyStatus::Available,
                         initial_request: None,
                     },
                 )
@@ -103,28 +103,10 @@ impl MessageHandler {
             .get_mut(&mention)
             .ok_or_else(|| Error::MachineNotControlled(event.clone()))?;
 
-        let message = serde_json::from_str::<DephyGachaMessage>(&event.content)?;
+        let message = serde_json::from_str::<DephyDsProxyMessage>(&event.content)?;
 
         match message {
-            DephyGachaMessage::Request { .. } => {
-                return Err(Error::OnlySupportStatusEventWhenUpdateMachine(
-                    event.clone(),
-                ))
-            }
-
-            DephyGachaMessage::Ask { .. } => {
-                return Err(Error::OnlySupportStatusEventWhenUpdateMachine(
-                    event.clone(),
-                ))
-            }
-
-            DephyGachaMessage::Anwser { .. } => {
-                return Err(Error::OnlySupportStatusEventWhenUpdateMachine(
-                    event.clone(),
-                ))
-            }
-
-            DephyGachaMessage::Status {
+            DephyDsProxyMessage::Status {
                 status,
                 initial_request,
                 ..
@@ -132,6 +114,8 @@ impl MessageHandler {
                 machine.status = status;
                 machine.initial_request = Some(initial_request);
             }
+
+            _ => {}
         }
 
         Ok(())
@@ -217,8 +201,6 @@ impl MessageHandler {
                 .await
                 .expect("Failed to subscribe events");
 
-            tracing::info!(">>>>>>sub id: {:?}", sub_id);
-
             loop {
                 let notification = notifications
                     .recv()
@@ -254,18 +236,9 @@ impl MessageHandler {
                             },
                         ..
                     } => {
-                        // let Ok(message) = serde_json::from_str::<DephyGachaMessage>(&event.content)
-                        // else {
-                        //     tracing::error!("Failed to parse message: {:?}", event);
-                        //     continue;
-                        // };
-
-                        // tracing::info!(">>>>>>Received message: {:?}", message);
-                        // tracing::info!(">>>>>>subscription_id: {:?}", subscription_id);
-                        // tracing::info!(">>>>>>sub_id: {:?}", sub_id);
                         if subscription_id == sub_id {
                             let Ok(message) =
-                                serde_json::from_str::<DephyGachaMessage>(&event.content)
+                                serde_json::from_str::<DephyDsProxyMessage>(&event.content)
                             else {
                                 tracing::error!("Failed to parse message: {:?}", event);
                                 continue;
@@ -290,17 +263,17 @@ impl MessageHandler {
     async fn handle_message(
         &mut self,
         event: &Event,
-        message: &DephyGachaMessage,
+        message: &DephyDsProxyMessage,
     ) -> Result<(), Error> {
         match message {
-            DephyGachaMessage::Request {
+            DephyDsProxyMessage::Request {
                 to_status,
                 initial_request,
                 reason,
                 payload,
             } => {
                 if event.pubkey != self.admin_pubkey
-                    && *reason != DephyGachaStatusReason::UserRequest
+                    && *reason != DephyDsProxyStatusReason::UserRequest
                 {
                     tracing::error!(
                         "User can only use reason UserRequest, skip event: {:?}",
@@ -331,8 +304,8 @@ impl MessageHandler {
                     return Ok(());
                 }
 
-                if *to_status == DephyGachaStatus::Available {
-                    if *reason == DephyGachaStatusReason::UserRequest {
+                if *to_status == DephyDsProxyStatus::Available {
+                    if *reason == DephyDsProxyStatusReason::UserRequest {
                         tracing::error!(
                             "User cannot manually stop machine, skip event: {:?}",
                             event
@@ -352,7 +325,7 @@ impl MessageHandler {
                 }
 
                 let Ok(parsed_payload) =
-                    serde_json::from_str::<DephyGachaMessageRequestPayload>(payload)
+                    serde_json::from_str::<DephyDsProxyMessageRequestPayload>(payload)
                 else {
                     tracing::error!("Failed to parse payload, skip event: {:?}", payload);
                     return Ok(());
@@ -374,11 +347,11 @@ impl MessageHandler {
                 self.client
                     .send_event(
                         mention,
-                        &DephyGachaMessage::Status {
+                        &DephyDsProxyMessage::Status {
                             status: *to_status,
                             reason: *reason,
                             initial_request: event.id,
-                            payload: serde_json::to_string(&DephyGachaMessageStatusPayload {
+                            payload: serde_json::to_string(&DephyDsProxyMessageStatusPayload {
                                 user: parsed_payload.user.clone(),
                                 nonce: parsed_payload.nonce,
                                 recover_info: parsed_payload.recover_info.clone(),
@@ -388,7 +361,7 @@ impl MessageHandler {
                     .await?;
 
                 // TODO: Should check this by machine api
-                if *to_status == DephyGachaStatus::Working {
+                if *to_status == DephyDsProxyStatus::Working {
                     let client = self.client.clone();
                     let mention = mention.to_string();
                     let event_id = event.id;
@@ -397,12 +370,12 @@ impl MessageHandler {
                         client
                             .send_event(
                                 &mention,
-                                &DephyGachaMessage::Status {
-                                    status: DephyGachaStatus::Available,
-                                    reason: DephyGachaStatusReason::UserBehaviour,
+                                &DephyDsProxyMessage::Status {
+                                    status: DephyDsProxyStatus::Available,
+                                    reason: DephyDsProxyStatusReason::UserBehaviour,
                                     initial_request: event_id,
                                     payload: serde_json::to_string(
-                                        &DephyGachaMessageStatusPayload {
+                                        &DephyDsProxyMessageStatusPayload {
                                             user: parsed_payload.user.clone(),
                                             nonce: parsed_payload.nonce,
                                             recover_info: parsed_payload.recover_info,
@@ -417,7 +390,7 @@ impl MessageHandler {
                 }
             }
 
-            DephyGachaMessage::Ask {
+            DephyDsProxyMessage::Ask {
                 role,
                 content,
                 name,
@@ -460,10 +433,11 @@ impl MessageHandler {
                     .await
                 {
                     Ok(response) => {
+
                         self.client
                             .send_event(
                                 mention,
-                                &DephyGachaMessage::Anwser {
+                                &DephyDsProxyMessage::Anwser {
                                     finish_reason: response.choices[0].finish_reason.clone(),
                                     role: response.choices[0].message.role.clone(),
                                     content: response.choices[0].message.content.clone(),
@@ -477,9 +451,9 @@ impl MessageHandler {
                 }
             }
 
-            DephyGachaMessage::Anwser { .. } => {}
+            DephyDsProxyMessage::Anwser { .. } => {}
 
-            DephyGachaMessage::Status { .. } => self.update_machine(event).await?,
+            DephyDsProxyMessage::Status { .. } => self.update_machine(event).await?,
         }
         Ok(())
     }
