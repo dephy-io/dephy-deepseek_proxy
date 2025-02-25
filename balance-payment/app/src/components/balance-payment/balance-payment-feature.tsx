@@ -251,6 +251,48 @@ export default function BalancePaymentFeature() {
     }
   }
 
+  const handleAsk = async () => {
+    if (!publicKey) {
+      console.error('Wallet not connected')
+      return
+    }
+    if (!sk) {
+      toast.error('sk not initialized')
+      return
+    }
+    if (!machinePubkey) {
+      toast.error('machinePubkey not initialized')
+      return
+    }
+    if (!relay) {
+      toast.error('relay not initialized')
+      return
+    }
+    const sTag = 'dephy-dsproxy-controller'
+    const contentData = {
+      Ask: {
+        name: publicKey.toString(),
+        role: 'user',
+        content: '什么是内存泄漏？',
+      },
+    }
+
+    const content = JSON.stringify(contentData)
+
+    let eventTemplate = {
+      kind: 1573,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [
+        ['s', sTag],
+        ['p', machinePubkey],
+      ],
+      content,
+    }
+    const signedEvent = finalizeEvent(eventTemplate, sk)
+    const res = await relay.publish(signedEvent)
+    console.log("publish res:", res)
+  }
+
   const publishToRelay = async (nonce: number, recoverInfo: any, user: string) => {
     if (!sk) {
       toast.error('sk not initialized')
@@ -264,7 +306,7 @@ export default function BalancePaymentFeature() {
       toast.error('relay not initialized')
       return
     }
-    const sTag = selectedTab === 'decharge' ? 'dephy-decharge-controller' : 'dephy-gacha-controller'
+    const sTag = selectedTab === 'decharge' ? 'dephy-dsproxy-controller' : 'dephy-gacha-controller'
 
     const payload = JSON.stringify({
       recover_info: JSON.stringify(recoverInfo),
@@ -572,6 +614,10 @@ export default function BalancePaymentFeature() {
           </div>
         </div>
       </div>
+
+      <button className="btn btn-secondary w-full mt-4" onClick={handleAsk}>
+        Ask
+      </button>
 
       <div className="mb-8 p-4 bg-base-200 rounded-lg shadow-md">
         <h2 className="text-xl font-bold mb-4">{selectedTab === 'decharge' ? 'Charge' : 'Gacha'}</h2>

@@ -30,7 +30,7 @@ pub enum DephyGachaMessage {
     Ask {
         name: String,
         role: String,
-        content: String,
+        content: Option<String>,
     },
     Anwser {
         finish_reason: String,

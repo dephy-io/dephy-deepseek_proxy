@@ -217,6 +217,8 @@ impl MessageHandler {
                 .await
                 .expect("Failed to subscribe events");
 
+            tracing::info!(">>>>>>sub id: {:?}", sub_id);
+
             loop {
                 let notification = notifications
                     .recv()
@@ -251,16 +253,30 @@ impl MessageHandler {
                                 subscription_id,
                             },
                         ..
-                    } if subscription_id == sub_id => {
-                        let Ok(message) = serde_json::from_str::<DephyGachaMessage>(&event.content)
-                        else {
-                            tracing::error!("Failed to parse message: {:?}", event);
-                            continue;
-                        };
+                    } => {
+                        // let Ok(message) = serde_json::from_str::<DephyGachaMessage>(&event.content)
+                        // else {
+                        //     tracing::error!("Failed to parse message: {:?}", event);
+                        //     continue;
+                        // };
 
-                        self.handle_message(&event, &message)
-                            .await
-                            .expect("Failed to handle message");
+                        // tracing::info!(">>>>>>Received message: {:?}", message);
+                        // tracing::info!(">>>>>>subscription_id: {:?}", subscription_id);
+                        // tracing::info!(">>>>>>sub_id: {:?}", sub_id);
+                        if subscription_id == sub_id {
+                            let Ok(message) =
+                                serde_json::from_str::<DephyGachaMessage>(&event.content)
+                            else {
+                                tracing::error!("Failed to parse message: {:?}", event);
+                                continue;
+                            };
+
+                            tracing::info!(">>>>>>Received message: {:?}", message);
+
+                            self.handle_message(&event, &message)
+                                .await
+                                .expect("Failed to handle message");
+                        }
                     }
 
                     _ => {}
@@ -406,7 +422,7 @@ impl MessageHandler {
                 content,
                 name,
             } => {
-                tracing::info!("Received ask message: {}", content);
+                tracing::info!("Received ask message: {:?}", content);
 
                 let Some(mention) = extract_mention(event) else {
                     tracing::error!("Machine not mentioned in event, skip event: {:?}", event);
@@ -415,7 +431,7 @@ impl MessageHandler {
 
                 let messages = vec![AskMessage {
                     role: role.into(),
-                    content: content.into(),
+                    content: content.clone(),
                     name: Some(name.into()),
                 }];
                 match self
@@ -433,6 +449,13 @@ impl MessageHandler {
                         frequency_penalty: None,
                         logit_bias: None,
                         user: None,
+                        top_k: None,
+                        min_p: None,
+                        repetition_penalty: None,
+                        logprobs: None,
+                        top_logprobs: None,
+                        response_format: None,
+                        seed: None,
                     })
                     .await
                 {

@@ -7,10 +7,10 @@ use clap::ArgMatches;
 use clap::Command;
 use nostr::Keys;
 
-const SESSION: &str = "dephy-gacha-controller";
+const SESSION: &str = "dephy-dsproxy-controller";
 
 fn parse_args() -> Command {
-    Command::new("dephy-gacha-controller-node")
+    Command::new("dephy-dsproxy-controller-node")
         .arg_required_else_help(true)
         .about("Dephy gacha controller node daemon")
         .version(dephy_dsproxy_controller::VERSION)
@@ -63,6 +63,14 @@ fn parse_args() -> Command {
                 .value_parser(value_parser!(PathBuf))
                 .action(ArgAction::Set)
                 .help("Solana keypair path"),
+        )
+        .arg(
+            Arg::new("API_KEY")
+                .long("api-key")
+                .num_args(1)
+                .required(true)
+                .action(ArgAction::Set)
+                .help("API key of ppinfra"),
         )
 }
 

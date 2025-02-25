@@ -1,13 +1,13 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
+use std::{collections::HashMap, error::Error};
 
 const API_BASE_URL: &str = "https://api.ppinfra.com/v3/openai/chat/completions";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AskMessage {
     pub role: String,
-    pub content: String,
+    pub content: Option<String>,
     pub name: Option<String>,
 }
 
@@ -18,19 +18,36 @@ pub struct AnwserMessage {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponseFormat {
+    Text,
+    JsonObject,
+    JsonSchema { schema: serde_json::Value },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ChatCompletionRequest {
-    pub model: String,
-    pub messages: Vec<AskMessage>,
-    pub max_tokens: u32,
-    pub temperature: Option<f32>,
-    pub top_p: Option<f32>,
-    pub n: Option<u32>,
-    pub stream: Option<bool>,
-    pub stop: Option<Vec<String>>,
-    pub presence_penalty: Option<f32>,
-    pub frequency_penalty: Option<f32>,
-    pub logit_bias: Option<std::collections::HashMap<String, f32>>,
-    pub user: Option<String>,
+    pub model: String, 
+    pub messages: Vec<AskMessage>, 
+    pub max_tokens: u32, 
+
+    pub temperature: Option<f32>, 
+    pub top_p: Option<f32>, 
+    pub top_k: Option<u32>, 
+    pub min_p: Option<f32>, 
+    pub n: Option<u32>, 
+    pub stream: Option<bool>, 
+    pub stop: Option<Vec<String>>, 
+    pub presence_penalty: Option<f32>, 
+    pub frequency_penalty: Option<f32>, 
+    pub repetition_penalty: Option<f32>, 
+    pub logit_bias: Option<HashMap<String, i32>>, 
+    pub logprobs: Option<bool>, 
+    pub top_logprobs: Option<u32>, 
+
+    pub response_format: Option<ResponseFormat>, 
+    pub seed: Option<u32>, 
+    pub user: Option<String>, 
 }
 
 #[derive(Debug, Serialize, Deserialize)]
