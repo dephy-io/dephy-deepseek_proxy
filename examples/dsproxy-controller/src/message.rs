@@ -27,16 +27,6 @@ pub enum DephyDsProxyMessage {
         initial_request: EventId,
         payload: String,
     },
-    Ask {
-        name: String,
-        role: String,
-        content: Option<String>,
-    },
-    Anwser {
-        finish_reason: String,
-        role: String,
-        content: Option<String>,
-    },
     Status {
         status: DephyDsProxyStatus,
         reason: DephyDsProxyStatusReason,

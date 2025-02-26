@@ -13,11 +13,8 @@ use crate::message::DephyDsProxyMessageRequestPayload;
 use crate::message::DephyDsProxyMessageStatusPayload;
 use crate::message::DephyDsProxyStatus;
 use crate::message::DephyDsProxyStatusReason;
-use crate::node::ds_client::AskMessage;
 use crate::relay_client::extract_mention;
 use crate::RelayClient;
-
-use super::ds_client::{ChatCompletionRequest, DsClient};
 
 const PAY_AMOUNT: u64 = 5_000_000;
 
@@ -47,7 +44,6 @@ pub struct Machine {
 
 pub struct MessageHandler {
     client: RelayClient,
-    ds_client: DsClient,
     solana_rpc_url: String,
     solana_keypair_path: String,
     controller_pubkey: PublicKey,
@@ -59,7 +55,6 @@ pub struct MessageHandler {
 impl MessageHandler {
     pub fn new(
         client: RelayClient,
-        ds_client: DsClient,
         solana_rpc_url: &str,
         solana_keypair_path: &str,
         controller_pubkey: PublicKey,
@@ -83,7 +78,6 @@ impl MessageHandler {
 
         Self {
             client,
-            ds_client,
             solana_rpc_url: solana_rpc_url.to_string(),
             solana_keypair_path: solana_keypair_path.to_string(),
             controller_pubkey,
@@ -389,69 +383,6 @@ impl MessageHandler {
                     });
                 }
             }
-
-            DephyDsProxyMessage::Ask {
-                role,
-                content,
-                name,
-            } => {
-                tracing::info!("Received ask message: {:?}", content);
-
-                let Some(mention) = extract_mention(event) else {
-                    tracing::error!("Machine not mentioned in event, skip event: {:?}", event);
-                    return Ok(());
-                };
-
-                let messages = vec![AskMessage {
-                    role: role.into(),
-                    content: content.clone(),
-                    name: Some(name.into()),
-                }];
-                match self
-                    .ds_client
-                    .create_chat_completion(ChatCompletionRequest {
-                        model: "deepseek/deepseek-r1/community".into(),
-                        messages,
-                        max_tokens: 10240,
-                        temperature: None,
-                        top_p: None,
-                        n: None,
-                        stream: None,
-                        stop: None,
-                        presence_penalty: None,
-                        frequency_penalty: None,
-                        logit_bias: None,
-                        user: None,
-                        top_k: None,
-                        min_p: None,
-                        repetition_penalty: None,
-                        logprobs: None,
-                        top_logprobs: None,
-                        response_format: None,
-                        seed: None,
-                    })
-                    .await
-                {
-                    Ok(response) => {
-
-                        self.client
-                            .send_event(
-                                mention,
-                                &DephyDsProxyMessage::Anwser {
-                                    finish_reason: response.choices[0].finish_reason.clone(),
-                                    role: response.choices[0].message.role.clone(),
-                                    content: response.choices[0].message.content.clone(),
-                                },
-                            )
-                            .await?;
-                    }
-                    Err(err) => {
-                        tracing::error!("Failed to process anwser message: {:?}", err);
-                    }
-                }
-            }
-
-            DephyDsProxyMessage::Anwser { .. } => {}
 
             DephyDsProxyMessage::Status { .. } => self.update_machine(event).await?,
         }

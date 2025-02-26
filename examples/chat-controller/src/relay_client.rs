@@ -85,7 +85,7 @@ impl RelayClient {
         &self,
         until: Timestamp,
         author: Option<&PublicKey>,
-        mention: &PublicKey,
+        // mention: &PublicKey,
     ) -> Result<SubscriptionId, Error> {
         let mut filter = Filter::new();
 
@@ -93,7 +93,7 @@ impl RelayClient {
             .kind(EVENT_KIND)
             .until(until)
             .custom_tag(SESSION_TAG, [&self.session])
-            .custom_tag(MENTION_TAG, [mention.to_hex()])
+            // .custom_tag(MENTION_TAG, [mention.to_hex()])
             .limit(1);
 
         if let Some(author) = author {
@@ -116,13 +116,13 @@ impl RelayClient {
         mentions: I,
     ) -> Result<SubscriptionId, Error>
     where
-        I: IntoIterator<Item = PublicKey>,
+        I: IntoIterator<Item = String>,
     {
         let filter = Filter::new()
             .kind(EVENT_KIND)
             .since(since)
             .custom_tag(SESSION_TAG, [&self.session])
-            .custom_tag(MENTION_TAG, mentions.into_iter().map(|pk| pk.to_hex()));
+            .custom_tag(MENTION_TAG, mentions);
 
         let output = self.client.subscribe(vec![filter], None).await?;
 

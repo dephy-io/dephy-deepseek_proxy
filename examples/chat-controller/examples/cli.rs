@@ -5,15 +5,21 @@ use clap::Arg;
 use clap::ArgAction;
 use clap::ArgMatches;
 use clap::Command;
+use dephy_dsproxy_controller::message::DephyGachaMessage;
+use dephy_dsproxy_controller::message::DephyGachaMessageRequestPayload;
+use dephy_dsproxy_controller::message::DephyGachaStatus;
+use dephy_dsproxy_controller::message::DephyGachaStatusReason;
 use nostr::Keys;
+use nostr::Timestamp;
+use nostr_sdk::EventId;
 
 const SESSION: &str = "dephy-gacha-controller";
 
 fn parse_args() -> Command {
-    Command::new("dephy-gacha-controller-node")
+    Command::new("dephy-gacha-controller-cli")
         .arg_required_else_help(true)
-        .about("Dephy gacha controller node daemon")
-        .version(dephy_gacha_controller::VERSION)
+        .about("Dephy gacha controller")
+        .version(dephy_dsproxy_controller::VERSION)
         .arg(
             Arg::new("NOSTR_RELAY")
                 .long("nostr-relay")
@@ -32,83 +38,88 @@ fn parse_args() -> Command {
                 .help("Path to the file containing the hex or bech32 secret key"),
         )
         .arg(
-            Arg::new("ADMIN_PUBKEY")
-                .long("admin-pubkey")
-                .num_args(1)
-                .required(true)
-                .action(ArgAction::Set)
-                .help("Admin public key"),
-        )
-        .arg(
-            Arg::new("MACHINE_PUBKEYS")
-                .long("machine-pubkeys")
+            Arg::new("MACHINE_PUBKEY")
+                .long("machine-pubkey")
                 .num_args(1)
                 .required(true)
                 .action(ArgAction::Set)
                 .help("Machine public keys, comma separated"),
         )
         .arg(
-            Arg::new("SOLANA_RPC_URL")
-                .long("solana-rpc-url")
+            Arg::new("user")
+                .long("user")
                 .num_args(1)
                 .required(true)
                 .action(ArgAction::Set)
-                .help("Solana RPC URL"),
+                .help("User public key"),
         )
         .arg(
-            Arg::new("SOLANA_KEYPAIR")
-                .long("solana-keypair")
+            Arg::new("nonce")
+                .long("nonce")
                 .num_args(1)
-                .default_value("data/solana-keypair")
-                .value_parser(value_parser!(PathBuf))
+                .required(true)
+                .value_parser(value_parser!(u64))
                 .action(ArgAction::Set)
-                .help("Solana keypair path"),
+                .help("Nonce"),
+        )
+        .arg(
+            Arg::new("recover_info")
+                .long("recover-info")
+                .num_args(1)
+                .required(true)
+                .action(ArgAction::Set)
+                .help("Recover info"),
         )
 }
 
-async fn controller(args: &ArgMatches) {
+async fn cli(args: &ArgMatches) {
     let nostr_relay = args.get_one::<String>("NOSTR_RELAY").unwrap();
     let key_file_path = args.get_one::<PathBuf>("KEY_FILE").unwrap();
     let keys = read_or_generate_keypair(key_file_path);
-    let admin_pubkey = args
-        .get_one::<String>("ADMIN_PUBKEY")
+    let machine_pubkey = args
+        .get_one::<String>("MACHINE_PUBKEY")
         .unwrap()
         .parse()
-        .expect("Invalid admin pubkey");
-    let machine_pubkeys = args
-        .get_one::<String>("MACHINE_PUBKEYS")
-        .unwrap()
-        .split(',')
-        .map(|s| s.parse().expect("Invalid machine pubkey"))
-        .collect();
-    let solana_rpc_url = args.get_one::<String>("SOLANA_RPC_URL").unwrap();
-    let solana_keypair_path = args.get_one::<PathBuf>("SOLANA_KEYPAIR").unwrap();
-    if !solana_keypair_path.exists() {
-        panic!(
-            "Solana keypair file not found: {}",
-            solana_keypair_path.display()
-        );
-    }
+        .expect("Invalid machine pubkey");
+    let user = args.get_one::<String>("user").unwrap();
+    let nonce = args.get_one::<u64>("nonce").unwrap();
+    let recover_info = args.get_one::<String>("recover_info").unwrap();
 
-    println!("nostr relay: {}", nostr_relay);
-    println!("pubkey: {}", keys.public_key());
-
-    let client = dephy_gacha_controller::RelayClient::new(nostr_relay, &keys, SESSION, 4096)
+    let client = dephy_dsproxy_controller::RelayClient::new(nostr_relay, &keys, SESSION, 4096)
         .await
         .expect("Failed to connect to relay");
 
-    let message_handler = dephy_gacha_controller::node::MessageHandler::new(
-        client,
-        solana_rpc_url,
-        solana_keypair_path
-            .to_str()
-            .expect("Invalid solana keypair path"),
-        keys.public_key(),
-        admin_pubkey,
-        machine_pubkeys,
-    );
+    let mut notifications = client.notifications();
+    client
+        .subscribe(Timestamp::now(), [machine_pubkey])
+        .await
+        .expect("Failed to subscribe");
 
-    message_handler.run().await
+    let handler = tokio::spawn(async move {
+        loop {
+            let notification = notifications.recv().await;
+            tracing::info!("Received notification: {:?}", notification);
+        }
+    });
+
+    let payload = serde_json::to_string(&DephyGachaMessageRequestPayload {
+        user: user.clone(),
+        nonce: *nonce,
+        recover_info: recover_info.clone(),
+    })
+    .expect("Failed to serialize payload");
+
+    client
+        .send_event(&machine_pubkey.to_hex(), &DephyGachaMessage::Request {
+            to_status: DephyGachaStatus::Working,
+            reason: DephyGachaStatusReason::UserRequest,
+            initial_request: EventId::all_zeros(),
+            payload,
+        })
+        .await
+        .expect("Failed to send event");
+
+    handler.await.expect("Notification handler failed");
 }
 
 fn read_or_generate_keypair(path: &PathBuf) -> Keys {
@@ -143,5 +154,5 @@ async fn main() {
         .try_init();
 
     let cmd = parse_args();
-    controller(&cmd.get_matches()).await;
+    cli(&cmd.get_matches()).await;
 }

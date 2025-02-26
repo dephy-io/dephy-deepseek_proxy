@@ -5,20 +5,20 @@ use clap::Arg;
 use clap::ArgAction;
 use clap::ArgMatches;
 use clap::Command;
-use dephy_dsproxy_controller::message::DephyGachaMessage;
-use dephy_dsproxy_controller::message::DephyGachaMessageRequestPayload;
-use dephy_dsproxy_controller::message::DephyGachaStatus;
-use dephy_dsproxy_controller::message::DephyGachaStatusReason;
+use dephy_dsproxy_controller::message::DephyDsProxyMessage;
+use dephy_dsproxy_controller::message::DephyDsProxyMessageRequestPayload;
+use dephy_dsproxy_controller::message::DephyDsProxyStatus;
+use dephy_dsproxy_controller::message::DephyDsProxyStatusReason;
 use nostr::Keys;
 use nostr::Timestamp;
 use nostr_sdk::EventId;
 
-const SESSION: &str = "dephy-gacha-controller";
+const SESSION: &str = "dephy-dsproxy-controller";
 
 fn parse_args() -> Command {
-    Command::new("dephy-gacha-controller-cli")
+    Command::new("dephy-dsproxy-controller-cli")
         .arg_required_else_help(true)
-        .about("Dephy gacha controller")
+        .about("Dephy dsproxy controller")
         .version(dephy_dsproxy_controller::VERSION)
         .arg(
             Arg::new("NOSTR_RELAY")
@@ -102,7 +102,7 @@ async fn cli(args: &ArgMatches) {
         }
     });
 
-    let payload = serde_json::to_string(&DephyGachaMessageRequestPayload {
+    let payload = serde_json::to_string(&DephyDsProxyMessageRequestPayload {
         user: user.clone(),
         nonce: *nonce,
         recover_info: recover_info.clone(),
@@ -110,9 +110,9 @@ async fn cli(args: &ArgMatches) {
     .expect("Failed to serialize payload");
 
     client
-        .send_event(&machine_pubkey.to_hex(), &DephyGachaMessage::Request {
-            to_status: DephyGachaStatus::Working,
-            reason: DephyGachaStatusReason::UserRequest,
+        .send_event(&machine_pubkey.to_hex(), &DephyDsProxyMessage::Request {
+            to_status: DephyDsProxyStatus::Working,
+            reason: DephyDsProxyStatusReason::UserRequest,
             initial_request: EventId::all_zeros(),
             payload,
         })

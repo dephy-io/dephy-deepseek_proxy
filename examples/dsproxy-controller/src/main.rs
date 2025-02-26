@@ -64,14 +64,6 @@ fn parse_args() -> Command {
                 .action(ArgAction::Set)
                 .help("Solana keypair path"),
         )
-        .arg(
-            Arg::new("API_KEY")
-                .long("api-key")
-                .num_args(1)
-                .required(true)
-                .action(ArgAction::Set)
-                .help("API key of ppinfra"),
-        )
 }
 
 async fn controller(args: &ArgMatches) {
@@ -97,8 +89,6 @@ async fn controller(args: &ArgMatches) {
             solana_keypair_path.display()
         );
     }
-    let api_key = args.get_one::<String>("API_KEY").unwrap();
-
     println!("nostr relay: {}", nostr_relay);
     println!("pubkey: {}", keys.public_key());
 
@@ -106,11 +96,8 @@ async fn controller(args: &ArgMatches) {
         .await
         .expect("Failed to connect to relay");
 
-    let ds_client = dephy_dsproxy_controller::node::DsClient::new(api_key.into());
-
     let message_handler = dephy_dsproxy_controller::node::MessageHandler::new(
         client,
-        ds_client,
         solana_rpc_url,
         solana_keypair_path
             .to_str()

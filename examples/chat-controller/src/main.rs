@@ -7,13 +7,13 @@ use clap::ArgMatches;
 use clap::Command;
 use nostr::Keys;
 
-const SESSION: &str = "dephy-decharge-controller";
+const SESSION: &str = "chat-controller";
 
 fn parse_args() -> Command {
-    Command::new("dephy-decharge-controller-node")
+    Command::new("chat-controller-node")
         .arg_required_else_help(true)
-        .about("Dephy decharge controller node daemon")
-        .version(dephy_decharge_controller::VERSION)
+        .about("Dephy gacha controller node daemon")
+        .version(chat_controller::VERSION)
         .arg(
             Arg::new("NOSTR_RELAY")
                 .long("nostr-relay")
@@ -40,20 +40,21 @@ fn parse_args() -> Command {
                 .help("Admin public key"),
         )
         .arg(
-            Arg::new("MACHINE_PUBKEYS")
-                .long("machine-pubkeys")
+            Arg::new("SOLANA_KEYPAIR")
+                .long("solana-keypair")
                 .num_args(1)
-                .required(true)
+                .default_value("data/solana-keypair")
+                .value_parser(value_parser!(PathBuf))
                 .action(ArgAction::Set)
-                .help("Machine public keys, comma separated"),
+                .help("Solana keypair path"),
         )
         .arg(
-            Arg::new("SOLANA_RPC_URL")
-                .long("solana-rpc-url")
+            Arg::new("API_KEY")
+                .long("api-key")
                 .num_args(1)
                 .required(true)
                 .action(ArgAction::Set)
-                .help("Solana RPC URL"),
+                .help("API key of ppinfra"),
         )
 }
 
@@ -66,27 +67,33 @@ async fn controller(args: &ArgMatches) {
         .unwrap()
         .parse()
         .expect("Invalid admin pubkey");
-    let machine_pubkeys = args
-        .get_one::<String>("MACHINE_PUBKEYS")
-        .unwrap()
-        .split(',')
-        .map(|s| s.parse().expect("Invalid machine pubkey"))
-        .collect();
-    let solana_rpc_url = args.get_one::<String>("SOLANA_RPC_URL").unwrap();
+    let solana_keypair_path = args.get_one::<PathBuf>("SOLANA_KEYPAIR").unwrap();
+    if !solana_keypair_path.exists() {
+        panic!(
+            "Solana keypair file not found: {}",
+            solana_keypair_path.display()
+        );
+    }
+    let api_key = args.get_one::<String>("API_KEY").unwrap();
 
     println!("nostr relay: {}", nostr_relay);
     println!("pubkey: {}", keys.public_key());
 
-    let client = dephy_decharge_controller::RelayClient::new(nostr_relay, &keys, SESSION, 4096)
+    let client = chat_controller::RelayClient::new(nostr_relay, &keys, SESSION, 4096)
         .await
         .expect("Failed to connect to relay");
 
-    let message_handler = dephy_decharge_controller::node::MessageHandler::new(
+    let ds_client = chat_controller::node::DsClient::new(api_key.into());
+
+    let message_handler = chat_controller::node::MessageHandler::new(
         client,
+        ds_client,
+        solana_keypair_path
+            .to_str()
+            .expect("Invalid solana keypair path"),
         keys.public_key(),
         admin_pubkey,
-        machine_pubkeys,
-        solana_rpc_url,
+        // machine_pubkeys,
     );
 
     message_handler.run().await

@@ -1,5 +1,5 @@
+mod ds_client;
 mod message_handler;
-mod state;
 
 pub use message_handler::MessageHandler;
-pub use state::State;
+pub use ds_client::DsClient;

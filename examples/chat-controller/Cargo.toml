@@ -1,5 +1,5 @@
 [package]
-name = "dephy-gacha-controller"
+name = "chat-controller"
 version = "0.1.0"
 edition = "2021"
 license.workspace = true
@@ -10,6 +10,7 @@ dephy-balance-payment-sdk = { workspace = true }
 futures = { workspace = true }
 nostr = { workspace = true }
 nostr-sdk = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

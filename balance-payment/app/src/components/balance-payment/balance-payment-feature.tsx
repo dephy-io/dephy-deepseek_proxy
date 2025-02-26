@@ -29,6 +29,7 @@ interface Message {
 }
 
 const MACHINE_PUBKEY = 'd041ea9854f2117b82452457c4e6d6593a96524027cd4032d2f40046deb78d93'
+const CHAT_UUID = '664385e1a27240d7bbcd2ca83212445e'
 
 // define charge status
 type ChargeStatus = 'idle' | 'requested' | 'working' | 'available' | 'error'
@@ -38,7 +39,7 @@ export default function BalancePaymentFeature() {
   const { publicKey, wallet, signMessage } = useWallet()
   const { program, getGlobalPubkey, getUserAccountPubkey, generate64ByteUUIDPayload } = useBalancePaymentProgram()
 
-  const [selectedTab, setSelectedTab] = useState<'decharge' | 'gacha'>('decharge')
+  const [selectedTab, setSelectedTab] = useState<'payment' | 'chat'>('payment')
   const [serialNumberBytes, setSerialNumberBytes] = useState<Uint8Array | null>(null)
   const [globalAccount, setGlobalAccount] = useState<any>(null)
   const [userAccount, setUserAccount] = useState<any>(null)
@@ -55,8 +56,17 @@ export default function BalancePaymentFeature() {
 
   const [messages, setMessages] = useState<Message[]>(MSG)
   const [input, setInput] = useState('')
+  const [isAskLoading, setIsAskLoading] = useState(false)
 
-  const subscriptionRef = useRef<any>(null)
+  const subscriptionRef1 = useRef<any>(null)
+  const subscriptionRef2 = useRef<any>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+    }
+  }, [messages])
 
   useEffect(() => {
     const { uuidBytes } = generate64ByteUUIDPayload()
@@ -187,7 +197,7 @@ export default function BalancePaymentFeature() {
     }
   }
 
-  const handleSelectTab = (tab: 'decharge' | 'gacha') => {
+  const handleSelectTab = (tab: 'payment' | 'chat') => {
     if (isTabDisabled) {
       return
     }
@@ -242,7 +252,6 @@ export default function BalancePaymentFeature() {
         payload: Array.from(payload),
         deadline: deadline.toNumber(),
       }
-      // setRecoverInfo(recoverInfo)
     } catch (error) {
       toast.error(`Error signing message: ${error}`)
       setIsChargeDisabled(false)
@@ -267,11 +276,6 @@ export default function BalancePaymentFeature() {
 
   const handleAsk = async () => {
     if (!input.trim()) return
-
-    const newMessages: Message[] = [...messages, { role: 'user', content: input }]
-    setMessages(newMessages)
-    setInput('')
-
     if (!publicKey) {
       console.error('Wallet not connected')
       return
@@ -284,7 +288,16 @@ export default function BalancePaymentFeature() {
       toast.error('relay not initialized')
       return
     }
-    const sTag = 'dephy-dsproxy-controller'
+    const newMessages: Message[] = [
+      ...messages,
+      { role: 'user', content: input },
+      { role: 'assistant', content: 'pending...' },
+    ]
+    setMessages(newMessages)
+    setInput('')
+
+    const sTag = 'chat-controller'
+
     const contentData = {
       Ask: {
         name: publicKey.toString(),
@@ -300,13 +313,14 @@ export default function BalancePaymentFeature() {
       created_at: Math.floor(Date.now() / 1000),
       tags: [
         ['s', sTag],
-        ['p', MACHINE_PUBKEY],
+        ['p', CHAT_UUID],
       ],
       content,
     }
     const signedEvent = finalizeEvent(eventTemplate, sk)
     await relay.publish(signedEvent)
-    await listenFromRelay()
+    await listenFromRelay2()
+    setIsAskLoading(true)
   }
 
   const publishToRelay = async (nonce: number, recoverInfo: any, user: string) => {
@@ -318,7 +332,7 @@ export default function BalancePaymentFeature() {
       toast.error('relay not initialized')
       return
     }
-    const sTag = selectedTab === 'decharge' ? 'dephy-dsproxy-controller' : 'dephy-gacha-controller'
+    const sTag = 'dephy-dsproxy-controller'
 
     const payload = JSON.stringify({
       recover_info: JSON.stringify(recoverInfo),
@@ -360,15 +374,15 @@ export default function BalancePaymentFeature() {
       return
     }
 
-    const sTag = selectedTab === 'decharge' ? 'dephy-dsproxy-controller' : 'dephy-gacha-controller'
+    const sTag = 'dephy-dsproxy-controller'
 
     // clear old subscription
-    if (subscriptionRef.current) {
-      subscriptionRef.current.close()
+    if (subscriptionRef1.current) {
+      subscriptionRef1.current.close()
     }
 
     // create new subscription
-    subscriptionRef.current = relay.subscribe(
+    subscriptionRef1.current = relay.subscribe(
       [
         {
           kinds: [1573],
@@ -417,12 +431,74 @@ export default function BalancePaymentFeature() {
     )
   }
 
+  const listenFromRelay2 = async () => {
+    if (!sk) {
+      toast.error('sk not initialized')
+      return
+    }
+    if (!relay) {
+      toast.error('relay not initialized')
+      return
+    }
+
+    // const sTag = selectedTab === 'decharge' ? 'dephy-dsproxy-controller' : 'dephy-gacha-controller'
+
+    // clear old subscription
+    if (subscriptionRef2.current) {
+      subscriptionRef2.current.close()
+    }
+
+    // create new subscription
+    subscriptionRef2.current = relay.subscribe(
+      [
+        {
+          kinds: [1573],
+          since: Math.floor(Date.now() / 1000),
+          '#s': ['chat-controller'],
+          '#p': [CHAT_UUID],
+        },
+      ],
+      {
+        onevent: async (event) => {
+          console.log('event received:', event)
+          setEvents((prevEvents) => [...prevEvents, event])
+          const content = JSON.parse(event.content)
+          try {
+            if (content.Anwser) {
+              let text: string
+              if (content.Anwser.finish_reason !== 'stop') {
+                text = content.Anwser.finish_reason
+              } else {
+                text = content.Anwser.content
+              }
+              // setMessages((prevMessages) => [...prevMessages, { role: content.Anwser.role, content: text }])
+              setMessages((prevMessages) =>
+                prevMessages.slice(0, -1).concat([{ role: content.Anwser.role, content: text }]),
+              )
+            }
+          } catch (error) {
+            toast.error(`Error parsing event content: ${error}`)
+            setMessages((prevMessages) => prevMessages.slice(0, -1))
+          } finally {
+            setIsAskLoading(false)
+          }
+        },
+        oneose() {
+          console.log('eose received')
+        },
+        onclose(reason) {
+          console.log('close received:', reason)
+        },
+      },
+    )
+  }
+
   // reset status
   const handleReset = () => {
     // clear old subscription
-    if (subscriptionRef.current) {
-      subscriptionRef.current.close()
-      subscriptionRef.current = null
+    if (subscriptionRef1.current) {
+      subscriptionRef1.current.close()
+      subscriptionRef1.current = null
     }
 
     // setRecoverInfo(null)
@@ -433,52 +509,33 @@ export default function BalancePaymentFeature() {
 
   const ProgressBar = () => {
     let progress = 0
-    // let statusText = ''
+    let statusText = ''
     let barColor = 'bg-gray-300' // default gray
-
-    const statusTextMap = {
-      decharge: {
-        requested: 'Requested - Waiting for charging station...',
-        working: 'Working - Charging in progress...',
-        available: 'Available - Charging completed!',
-        error: 'Error - Charging failed!',
-        idle: 'Idle - Ready to charge',
-      },
-      gacha: {
-        requested: 'Requested - Waiting for gacha machine...',
-        working: 'Working - Gacha in progress...',
-        available: 'Available - Gacha completed!',
-        error: 'Error - Gacha failed!',
-        idle: 'Idle - Ready to play',
-      },
-    }
-
-    const statusText = statusTextMap[selectedTab][chargeStatus]
 
     switch (chargeStatus) {
       case 'requested':
         progress = 33
-        // statusText = 'Requested - Waiting for charging station...'
+        statusText = 'Requested - Waiting for ds_proxy station...'
         barColor = 'bg-blue-500'
         break
       case 'working':
         progress = 66
-        // statusText = 'Working - Charging in progress...'
+        statusText = 'Working - Pay in progress...'
         barColor = 'bg-blue-500'
         break
       case 'available':
         progress = 100
-        // statusText = 'Available - Charging completed!'
+        statusText = 'Available - Pay completed!'
         barColor = 'bg-green-500'
         break
       case 'error':
         progress = 100
-        // statusText = 'Error - Something went wrong!'
+        statusText = 'Error - Something went wrong!'
         barColor = 'bg-red-500'
         break
       default:
         progress = 0
-        // statusText = 'Idle - Ready to charge'
+        statusText = 'Idle - Ready to pay'
         barColor = 'bg-gray-300'
     }
 
@@ -504,8 +561,7 @@ export default function BalancePaymentFeature() {
     }
 
     const getPurpose = () => {
-      const sTag = event.tags.find((t: string[]) => t[0] === 's')?.[1]
-      const eventType = sTag === 'dephy-decharge-controller' ? 'Decharge' : 'Gacha'
+      const eventType = 'Deepseek Proxy'
 
       try {
         const content = JSON.parse(event.content)
@@ -545,163 +601,176 @@ export default function BalancePaymentFeature() {
       <div className="inline-flex p-1 bg-gray-100 rounded-full mb-8">
         <button
           className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
-            selectedTab === 'decharge' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            selectedTab === 'payment' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
           } ${isTabDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-          onClick={() => handleSelectTab('decharge')}
+          onClick={() => handleSelectTab('payment')}
           disabled={isTabDisabled}
         >
-          Decharge
-          {selectedTab === 'decharge' && isTabDisabled && <span className="ml-2 animate-pulse">(Processing...)</span>}
+          Payment
+          {selectedTab === 'payment' && isTabDisabled && <span className="ml-2 animate-pulse">(Processing...)</span>}
         </button>
         <button
           className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
-            selectedTab === 'gacha' ? 'bg-white text-pink-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            selectedTab === 'chat' ? 'bg-white text-pink-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
           } ${isTabDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-          onClick={() => handleSelectTab('gacha')}
+          onClick={() => handleSelectTab('chat')}
           disabled={isTabDisabled}
         >
-          Gacha
-          {selectedTab === 'gacha' && isTabDisabled && <span className="ml-2 animate-pulse">(Processing...)</span>}
+          Chat
+          {selectedTab === 'chat' && isTabDisabled && <span className="ml-2 animate-pulse">(Processing...)</span>}
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-4 mb-8">
-        {/* userAccount */}
-        <div className="flex-1 p-4 bg-base-200 rounded-lg shadow-md">
-          <h2 className="text-xl font-bold mb-2">User Account</h2>
-          {userAccount ? (
-            <div className="space-y-2">
-              <p>
-                <span className="font-semibold">Nonce:</span> <span>{userAccount.nonce.toString()}</span>
-              </p>
-              <p>
-                <span className="font-semibold">Locked Amount:</span>{' '}
-                <span>{userAccount.lockedAmount.toNumber() / 10 ** 9} SOL</span>
-              </p>
-              <p>
-                <span className="font-semibold">Vault:</span> <span>{userAccount.vault.toString()}</span>
-              </p>
-              <p>
-                <span className="font-semibold">Vault Balance:</span>{' '}
-                <span>{vaultBalance ? `${vaultBalance / 10 ** 9} SOL` : 'Loading...'}</span>
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center">
-              <p>No user account data found.</p>
-              <button className="btn btn-primary mt-4" onClick={handleRegister} disabled={!publicKey}>
-                Register
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* deposit */}
-        <div className="flex-1 p-4 bg-base-200 rounded-lg shadow-md">
-          <h2 className="text-xl font-bold mb-4">Deposit</h2>
-          <div className="space-y-4">
-            <input
-              type="text"
-              placeholder="Amount (SOL)"
-              value={depositAmount}
-              onChange={(e) => setDepositAmount(e.target.value)}
-              className="input input-bordered w-full placeholder:text-sm"
-            />
-            <button className="btn btn-primary w-full" onClick={handleDeposit} disabled={!depositAmount}>
-              Deposit
-            </button>
-          </div>
-        </div>
-
-        {/* withdraw */}
-        <div className="flex-1 p-4 bg-base-200 rounded-lg shadow-md">
-          <h2 className="text-xl font-bold mb-4">Withdraw</h2>
-          <div className="space-y-4">
-            <input
-              type="text"
-              placeholder="Amount (SOL)"
-              value={withdrawAmount}
-              onChange={(e) => setWithdrawAmount(e.target.value)}
-              className="input input-bordered w-full placeholder:text-sm"
-            />
-            <button className="btn btn-primary w-full" onClick={handleWithdraw} disabled={!withdrawAmount}>
-              Withdraw
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-4 flex flex-col h-[80vh]">
-        {/* 消息列表 */}
-        <div className="flex-1 overflow-auto space-y-4">
-          {messages.map((msg, index) => {
-            // 正则匹配 <think>...</think> 之间的文本
-            const parts = msg.content.split(/<think>(.*?)<\/think>/g)
-
-            return (
-              <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`p-3 max-w-md rounded-lg shadow ${msg.role === 'user' ? 'bg-blue-100' : 'bg-gray-100'}`}
-                >
-                  {parts.map((part, i) =>
-                    i % 2 === 0 ? (
-                      <ReactMarkdown key={i}>{part}</ReactMarkdown> // 正常文本
-                    ) : (
-                      <span key={i} className="text-xs text-gray-500 block leading-tight mb-2">
-                        {'>>'}
-                        {/* 灰色小字 */}
-                        {part}
-                      </span>
-                    ),
-                  )}
+      {selectedTab === 'payment' ? (
+        <>
+          <div className="flex flex-wrap gap-4 mb-8">
+            {/* userAccount */}
+            <div className="flex-1 p-4 bg-base-200 rounded-lg shadow-md">
+              <h2 className="text-xl font-bold mb-2">User Account</h2>
+              {userAccount ? (
+                <div className="space-y-2">
+                  <p>
+                    <span className="font-semibold">Nonce:</span> <span>{userAccount.nonce.toString()}</span>
+                  </p>
+                  <p>
+                    <span className="font-semibold">Locked Amount:</span>{' '}
+                    <span>{userAccount.lockedAmount.toNumber() / 10 ** 9} SOL</span>
+                  </p>
+                  <p>
+                    <span className="font-semibold">Vault:</span> <span>{userAccount.vault.toString()}</span>
+                  </p>
+                  <p>
+                    <span className="font-semibold">Vault Balance:</span>{' '}
+                    <span>{vaultBalance ? `${vaultBalance / 10 ** 9} SOL` : 'Loading...'}</span>
+                  </p>
                 </div>
+              ) : (
+                <div className="flex flex-col items-center">
+                  <p>No user account data found.</p>
+                  <button className="btn btn-primary mt-4" onClick={handleRegister} disabled={!publicKey}>
+                    Register
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* deposit */}
+            <div className="flex-1 p-4 bg-base-200 rounded-lg shadow-md">
+              <h2 className="text-xl font-bold mb-4">Deposit</h2>
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  placeholder="Amount (SOL)"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  className="input input-bordered w-full placeholder:text-sm"
+                />
+                <button className="btn btn-primary w-full" onClick={handleDeposit} disabled={!depositAmount}>
+                  Deposit
+                </button>
               </div>
-            )
-          })}
+            </div>
+
+            {/* withdraw */}
+            <div className="flex-1 p-4 bg-base-200 rounded-lg shadow-md">
+              <h2 className="text-xl font-bold mb-4">Withdraw</h2>
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  placeholder="Amount (SOL)"
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  className="input input-bordered w-full placeholder:text-sm"
+                />
+                <button className="btn btn-primary w-full" onClick={handleWithdraw} disabled={!withdrawAmount}>
+                  Withdraw
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-8 p-4 bg-base-200 rounded-lg shadow-md">
+            <h2 className="text-xl font-bold mb-4">{'Pay'}</h2>
+            <ProgressBar />
+
+            {events.map((event, index) => (
+              <EventJsonViewer key={index} event={event} index={index} />
+            ))}
+
+            {chargeStatus === 'available' && (
+              <button className="btn btn-secondary w-full mt-4" onClick={handleReset}>
+                Reset
+              </button>
+            )}
+
+            <button
+              className={`btn btn-primary w-full mt-4 border-none bg-blue-500 hover:bg-blue-600 text-white`}
+              onClick={handleCharge}
+              disabled={!wallet || !serialNumberBytes || isChargeDisabled || chargeStatus !== 'idle'}
+            >
+              Pay
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="w-full p-4 flex flex-col h-[80vh]">
+          {/* 消息列表 */}
+          <div className="flex-1 overflow-auto space-y-4" ref={messagesContainerRef} >
+            {messages.map((msg, index) => {
+              const parts = msg.content.split(/<think>(.*?)<\/think>/gs)
+              return (
+                <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    className={`p-3 rounded-lg shadow ${msg.role === 'user' ? 'bg-blue-100' : 'bg-gray-100 max-w-4xl w-full'}`}
+                  >
+                    {parts.map((part, i) =>
+                      i % 2 === 0 ? (
+                        <ReactMarkdown key={i}>{part}</ReactMarkdown>
+                      ) : (
+                        <span key={i} className="text-xs text-gray-500 block leading-tight mb-2">
+                          {'>>'}
+                          {part}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* 输入框和按钮 */}
+          <div className="mt-4 flex items-center border-t pt-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
+              className="flex-1 p-2 border rounded-lg mr-2"
+              placeholder="Ask DeepSeek"
+            />
+            <button onClick={handleAsk} className="px-4 py-2 bg-pink-500 text-white rounded-lg" disabled={isAskLoading}>
+              {isAskLoading ? (
+                <svg
+                  className="animate-spin h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+              ) : (
+                'Ask'
+              )}
+            </button>
+          </div>
         </div>
-
-        {/* 输入框和按钮 */}
-        <div className="mt-4 flex items-center border-t pt-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
-            className="flex-1 p-2 border rounded-lg"
-            placeholder="输入消息..."
-          />
-          <button onClick={handleAsk} className="ml-2 px-4 py-2 bg-blue-500 text-white rounded-lg">
-            Ask
-          </button>
-        </div>
-      </div>
-
-      <div className="mb-8 p-4 bg-base-200 rounded-lg shadow-md">
-        <h2 className="text-xl font-bold mb-4">{selectedTab === 'decharge' ? 'Charge' : 'Gacha'}</h2>
-        <ProgressBar />
-
-        {events.map((event, index) => (
-          <EventJsonViewer key={index} event={event} index={index} />
-        ))}
-
-        {chargeStatus === 'available' && (
-          <button className="btn btn-secondary w-full mt-4" onClick={handleReset}>
-            Reset
-          </button>
-        )}
-
-        <button
-          className={`btn btn-primary w-full mt-4 border-none ${
-            selectedTab === 'decharge'
-              ? 'bg-blue-500 hover:bg-blue-600 text-white'
-              : 'bg-pink-500 hover:bg-pink-600 text-white'
-          }`}
-          onClick={handleCharge}
-          disabled={!wallet || !serialNumberBytes || isChargeDisabled || chargeStatus !== 'idle'}
-        >
-          {selectedTab === 'decharge' ? 'Start Charge' : 'Play Gacha'}
-        </button>
-      </div>
+      )}
     </div>
   ) : (
     <div className="max-w-4xl mx-auto">
