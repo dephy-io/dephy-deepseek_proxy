@@ -14,15 +14,6 @@ import ReactMarkdown from 'react-markdown'
 const SIGN_MESSAGE_PREFIX = 'DePHY vending machine/Example:\n'
 const RELAY_ENDPOINT = import.meta.env.VITE_RELAY_ENDPOINT || 'ws://127.0.0.1:8000'
 
-const MSG: Message[] = [
-  { role: 'user', content: '1+1=' },
-  {
-    role: 'assistant',
-    content: `<think> Okay, so the user asked "1+1=". Hmm, that's a basic math question. Let me think. Well, 1 plus 1 is one of the first things you learn in arithmetic. If I have one apple and someone gives me another apple, how many apples do I have? Two, right? So the answer should be 2. But wait, maybe there's a trick here. Sometimes people use base systems other than decimal, like binary. In binary, 1+1 equals 10. But the question doesn't specify the base, so I should assume it's base 10. Also, maybe the user is testing if I know the simplest answer. I don't see any context clues suggesting a different interpretation. So yeah, the answer is 2. Let me double-check. Yep, 1 plus 1 equals 2 in standard arithmetic. No complexities here. I'll go with that. </think>
-The result of 1 + 1 is 2. This follows from basic arithmetic addition, where combining one unit with another unit gives a total of two units.`,
-  },
-]
-
 interface Message {
   role: 'user' | 'assistant'
   content: string
@@ -54,7 +45,7 @@ export default function BalancePaymentFeature() {
   const [isChargeDisabled, setIsChargeDisabled] = useState(false)
   const isTabDisabled = chargeStatus !== 'idle' && chargeStatus !== 'available'
 
-  const [messages, setMessages] = useState<Message[]>(MSG)
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isAskLoading, setIsAskLoading] = useState(false)
 
@@ -86,6 +77,12 @@ export default function BalancePaymentFeature() {
   }, [program, publicKey])
 
   useEffect(() => {
+    if(selectedTab === 'chat' && sk && relay) {
+      fetchHistory();
+    } 
+  }, [selectedTab, sk, relay])
+
+  useEffect(() => {
     if (publicKey) {
       const intervalId = setInterval(fetchUserAccount, 3000)
 
@@ -94,7 +91,7 @@ export default function BalancePaymentFeature() {
   }, [publicKey])
 
   useEffect(() => {
-    ;(async () => {
+    (async () => {
       const sk = generateSecretKey()
       setSk(sk)
 
@@ -482,6 +479,70 @@ export default function BalancePaymentFeature() {
           } finally {
             setIsAskLoading(false)
           }
+        },
+        oneose() {
+          console.log('eose received')
+        },
+        onclose(reason) {
+          console.log('close received:', reason)
+        },
+      },
+    )
+  }
+
+  const fetchHistory = async () => {
+    if (!sk) {
+      toast.error('sk not initialized')
+      return
+    }
+    if (!relay) {
+      toast.error('relay not initialized')
+      return
+    }
+
+    // clear old subscription
+    if (subscriptionRef2.current) {
+      subscriptionRef2.current.close()
+    }
+
+    // create new subscription
+    subscriptionRef2.current = relay.subscribe(
+      [
+        {
+          kinds: [1573],
+          '#s': ['chat-controller'],
+          '#p': [CHAT_UUID],
+        },
+      ],
+      {
+        onevent: async (event) => {
+          console.log('event received:', event)
+          setEvents((prevEvents) => [...prevEvents, event])
+          const content = JSON.parse(event.content)
+          try {
+            if (content.Anwser) {
+              let text: string
+              if (content.Anwser.finish_reason !== 'stop') {
+                text = content.Anwser.finish_reason
+              } else {
+                text = content.Anwser.content
+              }
+              setMessages((prevMessages) => [...prevMessages, { role: content.Anwser.role, content: text }])
+              // setMessages((prevMessages) =>
+              //   prevMessages.slice(0, -1).concat([{ role: content.Anwser.role, content: text }]),
+              // )
+            }
+            if (content.Ask) {
+              const text = content.Ask.content;
+              setMessages((prevMessages) => [...prevMessages, { role: content.Ask.role, content: text }])
+            }
+          } catch (error) {
+            toast.error(`Error parsing event content: ${error}`)
+            // setMessages((prevMessages) => prevMessages.slice(0, -1))
+          } 
+          // finally {
+          //   setIsAskLoading(false)
+          // }
         },
         oneose() {
           console.log('eose received')

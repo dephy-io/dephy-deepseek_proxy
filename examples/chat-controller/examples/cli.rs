@@ -5,10 +5,10 @@ use clap::Arg;
 use clap::ArgAction;
 use clap::ArgMatches;
 use clap::Command;
-use dephy_dsproxy_controller::message::DephyGachaMessage;
-use dephy_dsproxy_controller::message::DephyGachaMessageRequestPayload;
-use dephy_dsproxy_controller::message::DephyGachaStatus;
-use dephy_dsproxy_controller::message::DephyGachaStatusReason;
+use chat_controller::message::ChatMessage;
+// use chat_controller::message::ChatMessageRequestPayload;
+// use chat_controller::message::ChatStatus;
+// use chat_controller::message::ChatStatusReason;
 use nostr::Keys;
 use nostr::Timestamp;
 use nostr_sdk::EventId;
@@ -19,7 +19,7 @@ fn parse_args() -> Command {
     Command::new("dephy-gacha-controller-cli")
         .arg_required_else_help(true)
         .about("Dephy gacha controller")
-        .version(dephy_dsproxy_controller::VERSION)
+        .version(chat_controller::VERSION)
         .arg(
             Arg::new("NOSTR_RELAY")
                 .long("nostr-relay")
@@ -85,7 +85,7 @@ async fn cli(args: &ArgMatches) {
     let nonce = args.get_one::<u64>("nonce").unwrap();
     let recover_info = args.get_one::<String>("recover_info").unwrap();
 
-    let client = dephy_dsproxy_controller::RelayClient::new(nostr_relay, &keys, SESSION, 4096)
+    let client = chat_controller::RelayClient::new(nostr_relay, &keys, SESSION, 4096)
         .await
         .expect("Failed to connect to relay");
 
@@ -102,7 +102,7 @@ async fn cli(args: &ArgMatches) {
         }
     });
 
-    let payload = serde_json::to_string(&DephyGachaMessageRequestPayload {
+    let payload = serde_json::to_string(&ChatMessageRequestPayload {
         user: user.clone(),
         nonce: *nonce,
         recover_info: recover_info.clone(),
@@ -110,9 +110,9 @@ async fn cli(args: &ArgMatches) {
     .expect("Failed to serialize payload");
 
     client
-        .send_event(&machine_pubkey.to_hex(), &DephyGachaMessage::Request {
-            to_status: DephyGachaStatus::Working,
-            reason: DephyGachaStatusReason::UserRequest,
+        .send_event(&machine_pubkey.to_hex(), &ChatMessage::Request {
+            to_status: ChatStatus::Working,
+            reason: ChatStatusReason::UserRequest,
             initial_request: EventId::all_zeros(),
             payload,
         })

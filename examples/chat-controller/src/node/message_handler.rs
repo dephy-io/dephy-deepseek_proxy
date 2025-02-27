@@ -1,5 +1,4 @@
 use nostr::Event;
-// use nostr::EventId;
 use nostr::PublicKey;
 use nostr::RelayMessage;
 use nostr::Timestamp;
@@ -29,8 +28,8 @@ pub struct MessageHandler {
     solana_keypair_path: String,
     controller_pubkey: PublicKey,
     admin_pubkey: PublicKey,
-    chats: Vec<String>,
     started_at: Timestamp,
+    cache: Vec<AskMessage>,
 }
 
 impl MessageHandler {
@@ -49,9 +48,8 @@ impl MessageHandler {
             solana_keypair_path: solana_keypair_path.to_string(),
             controller_pubkey,
             admin_pubkey,
-            // chats: HashMap::new(),
-            chats: vec![],
             started_at,
+            cache: vec![],
         }
     }
 
@@ -66,9 +64,69 @@ impl MessageHandler {
         };
 
         let message_handler = async move {
-            // TODO: get uuid from self.chats
+            // TODO: get uuid from controllers‘ communication
             let uuid = String::from("664385e1a27240d7bbcd2ca83212445e");
-            let mentions = vec![uuid];
+            let mentions = vec![uuid.clone()];
+
+            {
+                let mut notifications = self.client.notifications();
+
+                let sub_id = self
+                    .client
+                    .subscribe_last_events(
+                        self.started_at,
+                        None,
+                        uuid.clone(),
+                    )
+                    .await
+                    .expect("Failed to subscribe events");
+
+                while let Ok(notification) = notifications.recv().await {
+                    match notification {
+                        RelayPoolNotification::Shutdown => panic!("Relay pool shutdown"),
+
+                        RelayPoolNotification::Message {
+                            message: RelayMessage::EndOfStoredEvents(subscription_id),
+                            ..
+                        } => {
+                            if sub_id == subscription_id {
+                                break;
+                            }
+                        }
+
+                        RelayPoolNotification::Message {
+                            message: RelayMessage::Event { event, .. },
+                            ..
+                        } => {
+                            let message = serde_json::from_str::<ChatMessage>(&event.content).expect("Failed to parse event content");
+    
+                            match message {
+                                ChatMessage::Ask {
+                                    role,
+                                    content,
+                                    name,
+                                } => {
+                                    self.cache.push(AskMessage {
+                                        role,
+                                        content,
+                                        name: Some(name),
+                                    });
+                                }
+    
+                                ChatMessage::Anwser { role, content, .. } => {
+                                    self.cache.push(AskMessage {
+                                        role,
+                                        content,
+                                        name: None,
+                                    });
+                                }
+                            }
+                        }
+    
+                        _ => {}
+                    }
+                }
+            }
 
             let sub_id = self
                 .client
@@ -112,8 +170,7 @@ impl MessageHandler {
                         ..
                     } => {
                         if subscription_id == sub_id {
-                            let Ok(message) =
-                                serde_json::from_str::<ChatMessage>(&event.content)
+                            let Ok(message) = serde_json::from_str::<ChatMessage>(&event.content)
                             else {
                                 tracing::error!("Failed to parse message: {:?}", event);
                                 continue;
@@ -133,17 +190,8 @@ impl MessageHandler {
         futures::join!(relay_checker, message_handler);
     }
 
-    async fn handle_message(
-        &mut self,
-        event: &Event,
-        message: &ChatMessage,
-    ) -> Result<(), Error> {
+    async fn handle_message(&mut self, event: &Event, message: &ChatMessage) -> Result<(), Error> {
         match message {
-            ChatMessage::NewChat { uuid } => {
-                tracing::info!("Received new_chat message: {:?}", uuid);
-                self.chats.push(uuid.to_string());
-            }
-
             ChatMessage::Ask {
                 role,
                 content,
@@ -156,11 +204,15 @@ impl MessageHandler {
                     return Ok(());
                 };
 
-                let messages = vec![AskMessage {
+                let mut messages = self.cache.clone();
+                messages.push(AskMessage {
                     role: role.into(),
                     content: content.clone(),
                     name: Some(name.into()),
-                }];
+                });
+
+                tracing::debug!(">>>>>>Ask messages: {:?}", messages);
+
                 match self
                     .ds_client
                     .create_chat_completion(ChatCompletionRequest {

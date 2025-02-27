@@ -4,14 +4,14 @@ use std::{collections::HashMap, error::Error};
 
 const API_BASE_URL: &str = "https://api.ppinfra.com/v3/openai";
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AskMessage {
     pub role: String,
     pub content: Option<String>,
     pub name: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AnwserMessage {
     pub role: String,
     pub content: Option<String>,

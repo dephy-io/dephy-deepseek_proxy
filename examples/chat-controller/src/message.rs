@@ -4,9 +4,6 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ChatMessage {
-    NewChat {
-        uuid: String,
-    },
     Ask {
         name: String,
         role: String,

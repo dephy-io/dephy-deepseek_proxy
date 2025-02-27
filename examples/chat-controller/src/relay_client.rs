@@ -81,11 +81,11 @@ impl RelayClient {
         self.client.notifications()
     }
 
-    pub async fn subscribe_last_event(
+    pub async fn subscribe_last_events(
         &self,
         until: Timestamp,
         author: Option<&PublicKey>,
-        // mention: &PublicKey,
+        mention: String,
     ) -> Result<SubscriptionId, Error> {
         let mut filter = Filter::new();
 
@@ -93,8 +93,7 @@ impl RelayClient {
             .kind(EVENT_KIND)
             .until(until)
             .custom_tag(SESSION_TAG, [&self.session])
-            // .custom_tag(MENTION_TAG, [mention.to_hex()])
-            .limit(1);
+            .custom_tag(MENTION_TAG, [mention]);
 
         if let Some(author) = author {
             filter = filter.author(*author)
