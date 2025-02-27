@@ -5,7 +5,7 @@ use nostr::Timestamp;
 use nostr_sdk::RelayPoolNotification;
 
 use crate::message::ChatMessage;
-use crate::node::ds_client::AskMessage;
+use crate::node::ds_client::RequestMessage;
 use crate::relay_client::extract_mention;
 use crate::RelayClient;
 
@@ -29,7 +29,7 @@ pub struct MessageHandler {
     controller_pubkey: PublicKey,
     admin_pubkey: PublicKey,
     started_at: Timestamp,
-    cache: Vec<AskMessage>,
+    request_cache: Vec<RequestMessage>,
 }
 
 impl MessageHandler {
@@ -49,7 +49,7 @@ impl MessageHandler {
             controller_pubkey,
             admin_pubkey,
             started_at,
-            cache: vec![],
+            request_cache: vec![],
         }
     }
 
@@ -68,69 +68,9 @@ impl MessageHandler {
             let uuid = String::from("664385e1a27240d7bbcd2ca83212445e");
             let mentions = vec![uuid.clone()];
 
-            {
-                let mut notifications = self.client.notifications();
-
-                let sub_id = self
-                    .client
-                    .subscribe_last_events(
-                        self.started_at,
-                        None,
-                        uuid.clone(),
-                    )
-                    .await
-                    .expect("Failed to subscribe events");
-
-                while let Ok(notification) = notifications.recv().await {
-                    match notification {
-                        RelayPoolNotification::Shutdown => panic!("Relay pool shutdown"),
-
-                        RelayPoolNotification::Message {
-                            message: RelayMessage::EndOfStoredEvents(subscription_id),
-                            ..
-                        } => {
-                            if sub_id == subscription_id {
-                                break;
-                            }
-                        }
-
-                        RelayPoolNotification::Message {
-                            message: RelayMessage::Event { event, .. },
-                            ..
-                        } => {
-                            let message = serde_json::from_str::<ChatMessage>(&event.content).expect("Failed to parse event content");
-    
-                            match message {
-                                ChatMessage::Ask {
-                                    role,
-                                    content,
-                                    name,
-                                } => {
-                                    self.cache.push(AskMessage {
-                                        role,
-                                        content,
-                                        name: Some(name),
-                                    });
-                                }
-    
-                                ChatMessage::Anwser { role, content, .. } => {
-                                    self.cache.push(AskMessage {
-                                        role,
-                                        content,
-                                        name: None,
-                                    });
-                                }
-                            }
-                        }
-    
-                        _ => {}
-                    }
-                }
-            }
-
             let sub_id = self
                 .client
-                .subscribe(self.started_at, mentions)
+                .subscribe_all(None, Some(mentions))
                 .await
                 .expect("Failed to subscribe events");
 
@@ -139,7 +79,7 @@ impl MessageHandler {
                     .recv()
                     .await
                     .expect("Failed to receive notification");
-                tracing::debug!("Received notification: {:?}", notification);
+                // tracing::debug!("Received notification: {:?}", notification);
 
                 match notification {
                     RelayPoolNotification::Shutdown => panic!("Relay pool shutdown"),
@@ -197,66 +137,86 @@ impl MessageHandler {
                 content,
                 name,
             } => {
-                tracing::info!("Received ask message: {:?}", content);
+                tracing::debug!("Ask: {:?}", content);
 
                 let Some(mention) = extract_mention(event) else {
                     tracing::error!("Machine not mentioned in event, skip event: {:?}", event);
                     return Ok(());
                 };
-
-                let mut messages = self.cache.clone();
-                messages.push(AskMessage {
+                
+                let msg = RequestMessage {
                     role: role.into(),
                     content: content.clone(),
                     name: Some(name.into()),
-                });
+                };
 
-                tracing::debug!(">>>>>>Ask messages: {:?}", messages);
-
-                match self
-                    .ds_client
-                    .create_chat_completion(ChatCompletionRequest {
-                        model: "deepseek/deepseek-r1/community".into(),
-                        messages,
-                        max_tokens: 10240,
-                        temperature: None,
-                        top_p: None,
-                        n: None,
-                        stream: None,
-                        stop: None,
-                        presence_penalty: None,
-                        frequency_penalty: None,
-                        logit_bias: None,
-                        user: None,
-                        top_k: None,
-                        min_p: None,
-                        repetition_penalty: None,
-                        logprobs: None,
-                        top_logprobs: None,
-                        response_format: None,
-                        seed: None,
-                    })
-                    .await
-                {
-                    Ok(response) => {
-                        self.client
-                            .send_event(
-                                mention,
-                                &ChatMessage::Anwser {
-                                    finish_reason: response.choices[0].finish_reason.clone(),
-                                    role: response.choices[0].message.role.clone(),
-                                    content: response.choices[0].message.content.clone(),
-                                },
-                            )
-                            .await?;
-                    }
-                    Err(err) => {
-                        tracing::error!("Failed to process anwser message: {:?}", err);
+                if event.created_at < self.started_at {
+                    // history messages
+                    self.request_cache.push(msg)
+                } else {
+                    // new messages
+                    let mut messages = self.request_cache.clone();
+                    messages.push(msg.clone());
+    
+                    match self
+                        .ds_client
+                        .create_chat_completion(ChatCompletionRequest {
+                            model: "deepseek/deepseek-r1/community".into(),
+                            messages,
+                            max_tokens: 10240,
+                            temperature: None,
+                            top_p: None,
+                            n: None,
+                            stream: None,
+                            stop: None,
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            logit_bias: None,
+                            user: None,
+                            top_k: None,
+                            min_p: None,
+                            repetition_penalty: None,
+                            logprobs: None,
+                            top_logprobs: None,
+                            response_format: None,
+                            seed: None,
+                        })
+                        .await
+                    {
+                        Ok(response) => {
+                            self.client
+                                .send_event(
+                                    mention,
+                                    &ChatMessage::Anwser {
+                                        finish_reason: response.choices[0].finish_reason.clone(),
+                                        role: response.choices[0].message.role.clone(),
+                                        content: response.choices[0].message.content.clone(),
+                                    },
+                                )
+                                .await?;
+    
+                            self.request_cache.push(msg);
+                        }
+                        Err(err) => {
+                            tracing::error!("Failed to process anwser message: {:?}", err);
+                        }
                     }
                 }
+
             }
 
-            ChatMessage::Anwser { .. } => {}
+            ChatMessage::Anwser { role, content, finish_reason } => {
+                if finish_reason == "stop" {
+                    tracing::debug!("Anwser: {:?}", content);
+                    let msg = RequestMessage {
+                        role: role.into(),
+                        content: content.clone(),
+                        name: None,
+                    };
+    
+                    self.request_cache.push(msg);
+                }
+            }
         }
         Ok(())
     }

@@ -81,60 +81,17 @@ impl RelayClient {
         self.client.notifications()
     }
 
-    pub async fn subscribe_last_events(
-        &self,
-        until: Timestamp,
-        author: Option<&PublicKey>,
-        mention: String,
-    ) -> Result<SubscriptionId, Error> {
-        let mut filter = Filter::new();
-
-        filter = filter
-            .kind(EVENT_KIND)
-            .until(until)
-            .custom_tag(SESSION_TAG, [&self.session])
-            .custom_tag(MENTION_TAG, [mention]);
-
-        if let Some(author) = author {
-            filter = filter.author(*author)
-        }
-
-        let close_option =
-            SubscribeAutoCloseOptions::default().exit_policy(ReqExitPolicy::ExitOnEOSE);
-        let output = self
-            .client
-            .subscribe(vec![filter], Some(close_option))
-            .await?;
-
-        Ok(output.id().clone())
-    }
-
-    pub async fn subscribe<I>(
-        &self,
-        since: Timestamp,
-        mentions: I,
-    ) -> Result<SubscriptionId, Error>
-    where
-        I: IntoIterator<Item = String>,
-    {
-        let filter = Filter::new()
-            .kind(EVENT_KIND)
-            .since(since)
-            .custom_tag(SESSION_TAG, [&self.session])
-            .custom_tag(MENTION_TAG, mentions);
-
-        let output = self.client.subscribe(vec![filter], None).await?;
-
-        Ok(output.id().clone())
-    }
-
-    pub async fn subscribe_all(&self, since: Option<Timestamp>) -> Result<SubscriptionId, Error> {
+    pub async fn subscribe_all(&self, since: Option<Timestamp>, mentions: Option<Vec<String>>) -> Result<SubscriptionId, Error> {
         let mut filter = Filter::new()
             .kind(EVENT_KIND)
             .custom_tag(SESSION_TAG, [&self.session]);
 
         if let Some(since) = since {
             filter = filter.since(since);
+        }
+
+        if let Some(mentions) = mentions {
+            filter = filter.custom_tag(MENTION_TAG, mentions);
         }
 
         let output = self.client.subscribe(vec![filter], None).await?;

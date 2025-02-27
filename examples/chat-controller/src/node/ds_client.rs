@@ -5,14 +5,14 @@ use std::{collections::HashMap, error::Error};
 const API_BASE_URL: &str = "https://api.ppinfra.com/v3/openai";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AskMessage {
+pub struct RequestMessage {
     pub role: String,
     pub content: Option<String>,
     pub name: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AnwserMessage {
+pub struct ResponseMessage {
     pub role: String,
     pub content: Option<String>,
 }
@@ -28,7 +28,7 @@ pub enum ResponseFormat {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatCompletionRequest {
     pub model: String, 
-    pub messages: Vec<AskMessage>, 
+    pub messages: Vec<RequestMessage>, 
     pub max_tokens: u32, 
 
     pub temperature: Option<f32>, 
@@ -53,7 +53,7 @@ pub struct ChatCompletionRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatChoice {
     pub index: u32,
-    pub message: AnwserMessage,
+    pub message: ResponseMessage,
     pub finish_reason: String,
 }
 
