@@ -33,6 +33,10 @@ pub enum DephyDsProxyMessage {
         initial_request: EventId,
         payload: String,
     },
+    Account {
+        user: String,
+        tokens: u64,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

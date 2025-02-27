@@ -5,11 +5,12 @@ use nostr::Timestamp;
 use nostr_sdk::RelayPoolNotification;
 
 use crate::message::ChatMessage;
-use crate::node::ds_client::RequestMessage;
+use crate::utils::chat_client::{ChatCompletionRequest, ChatClient, RequestMessage};
 use crate::relay_client::extract_mention;
+use crate::utils::ds_proxy_client::DsProxyClient;
 use crate::RelayClient;
 
-use super::ds_client::{ChatCompletionRequest, DsClient};
+const MAX_CONTEXT_TOKENS: u32 = 30000;
 
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -24,7 +25,8 @@ pub enum Error {
 
 pub struct MessageHandler {
     client: RelayClient,
-    ds_client: DsClient,
+    chat_client: ChatClient,
+    ds_proxy_client: DsProxyClient,
     solana_keypair_path: String,
     controller_pubkey: PublicKey,
     admin_pubkey: PublicKey,
@@ -35,7 +37,8 @@ pub struct MessageHandler {
 impl MessageHandler {
     pub fn new(
         client: RelayClient,
-        ds_client: DsClient,
+        chat_client: ChatClient,
+        ds_proxy_client: DsProxyClient,
         solana_keypair_path: &str,
         controller_pubkey: PublicKey,
         admin_pubkey: PublicKey,
@@ -44,7 +47,8 @@ impl MessageHandler {
 
         Self {
             client,
-            ds_client,
+            chat_client,
+            ds_proxy_client,
             solana_keypair_path: solana_keypair_path.to_string(),
             controller_pubkey,
             admin_pubkey,
@@ -65,8 +69,8 @@ impl MessageHandler {
 
         let message_handler = async move {
             // TODO: get uuid from controllers‘ communication
-            let uuid = String::from("664385e1a27240d7bbcd2ca83212445e");
-            let mentions = vec![uuid.clone()];
+            let chat_id = String::from("664385e1a27240d7bbcd2ca83212445e");
+            let mentions = vec![chat_id.clone()];
 
             let sub_id = self
                 .client
@@ -143,7 +147,7 @@ impl MessageHandler {
                     tracing::error!("Machine not mentioned in event, skip event: {:?}", event);
                     return Ok(());
                 };
-                
+
                 let msg = RequestMessage {
                     role: role.into(),
                     content: content.clone(),
@@ -157,13 +161,25 @@ impl MessageHandler {
                     // new messages
                     let mut messages = self.request_cache.clone();
                     messages.push(msg.clone());
-    
+
+                    // get user tokens balance
+                    let tokens = match self.ds_proxy_client.fetch_user_tokens(name).await {
+                        Ok(t) => t,  
+                        Err(e) => {
+                            tracing::error!("Failed to fetch user tokens: {:?}", e);
+                            0
+                        }
+                    };
+
+                    tracing::info!("Tokens: {}", tokens);
+                    let max_tokens = if tokens < MAX_CONTEXT_TOKENS {tokens} else {MAX_CONTEXT_TOKENS};
+
                     match self
-                        .ds_client
+                        .chat_client
                         .create_chat_completion(ChatCompletionRequest {
                             model: "deepseek/deepseek-r1/community".into(),
                             messages,
-                            max_tokens: 10240,
+                            max_tokens,
                             temperature: None,
                             top_p: None,
                             n: None,
@@ -185,16 +201,25 @@ impl MessageHandler {
                     {
                         Ok(response) => {
                             self.client
-                                .send_event(
-                                    mention,
-                                    &ChatMessage::Anwser {
-                                        finish_reason: response.choices[0].finish_reason.clone(),
-                                        role: response.choices[0].message.role.clone(),
-                                        content: response.choices[0].message.content.clone(),
-                                    },
-                                )
-                                .await?;
-    
+                            .send_event(
+                                mention,
+                                &ChatMessage::Anwser {
+                                    finish_reason: response.choices[0].finish_reason.clone(),
+                                    role: response.choices[0].message.role.clone(),
+                                    content: response.choices[0].message.content.clone(),
+                                },
+                            )
+                            .await?;
+                        
+                            // get remaining tokens
+                            if let Some(usage) = response.usage {
+                                let remaining_tokens = tokens - usage.total_tokens;
+                                tracing::info!("Tokens Consumed: {}", usage.total_tokens);
+                                self.ds_proxy_client.update_user_account(name.to_string(), remaining_tokens).await?;
+                            } else {
+                                tracing::error!("Usage not defined in response");
+                            }
+
                             self.request_cache.push(msg);
                         }
                         Err(err) => {
@@ -202,10 +227,13 @@ impl MessageHandler {
                         }
                     }
                 }
-
             }
 
-            ChatMessage::Anwser { role, content, finish_reason } => {
+            ChatMessage::Anwser {
+                role,
+                content,
+                finish_reason,
+            } => {
                 if finish_reason == "stop" {
                     tracing::debug!("Anwser: {:?}", content);
                     let msg = RequestMessage {
@@ -213,7 +241,7 @@ impl MessageHandler {
                         content: content.clone(),
                         name: None,
                     };
-    
+
                     self.request_cache.push(msg);
                 }
             }

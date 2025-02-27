@@ -74,12 +74,12 @@ pub struct Usage {
     pub total_tokens: u32,
 }
 
-pub struct DsClient {
+pub struct ChatClient {
     client: Client,
     api_key: String,
 }
 
-impl DsClient {
+impl ChatClient {
     pub fn new(api_key: String) -> Self {
         Self {
             client: Client::new(),

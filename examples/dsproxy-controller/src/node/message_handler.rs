@@ -238,8 +238,6 @@ impl MessageHandler {
                                 continue;
                             };
 
-                            tracing::info!(">>>>>>Received message: {:?}", message);
-
                             self.handle_message(&event, &message)
                                 .await
                                 .expect("Failed to handle message");
@@ -354,6 +352,16 @@ impl MessageHandler {
                     )
                     .await?;
 
+                self.client
+                    .send_event(
+                        mention,
+                        &DephyDsProxyMessage::Account {                           
+                            user: parsed_payload.user.clone(),
+                            tokens: 100000
+                        },
+                    )
+                    .await?;
+
                 // TODO: Should check this by machine api
                 if *to_status == DephyDsProxyStatus::Working {
                     let client = self.client.clone();
@@ -385,6 +393,8 @@ impl MessageHandler {
             }
 
             DephyDsProxyMessage::Status { .. } => self.update_machine(event).await?,
+
+            DephyDsProxyMessage::Account { .. } => {}
         }
         Ok(())
     }

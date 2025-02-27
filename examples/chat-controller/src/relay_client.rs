@@ -2,16 +2,13 @@ use nostr::Event;
 use nostr::EventBuilder;
 use nostr::Filter;
 use nostr::Keys;
-use nostr::PublicKey;
 use nostr::SingleLetterTag;
 use nostr::SubscriptionId;
 use nostr::Tag;
 use nostr::Timestamp;
-use nostr_sdk::prelude::ReqExitPolicy;
 use nostr_sdk::Client;
 use nostr_sdk::RelayPoolNotification;
 use nostr_sdk::RelayStatus;
-use nostr_sdk::SubscribeAutoCloseOptions;
 use tokio::sync::broadcast::Receiver;
 
 const EVENT_KIND: nostr::Kind = nostr::Kind::Custom(1573);
@@ -81,7 +78,11 @@ impl RelayClient {
         self.client.notifications()
     }
 
-    pub async fn subscribe_all(&self, since: Option<Timestamp>, mentions: Option<Vec<String>>) -> Result<SubscriptionId, Error> {
+    pub async fn subscribe_all(
+        &self,
+        since: Option<Timestamp>,
+        mentions: Option<Vec<String>>,
+    ) -> Result<SubscriptionId, Error> {
         let mut filter = Filter::new()
             .kind(EVENT_KIND)
             .custom_tag(SESSION_TAG, [&self.session]);
@@ -100,7 +101,9 @@ impl RelayClient {
     }
 
     pub async fn send_event<M>(&self, to: &str, message: &M) -> Result<(), Error>
-    where M: serde::Serialize + std::fmt::Debug {
+    where
+        M: serde::Serialize + std::fmt::Debug,
+    {
         let content = serde_json::to_string(message)?;
 
         let event_builder = EventBuilder::new(EVENT_KIND, content).tags([

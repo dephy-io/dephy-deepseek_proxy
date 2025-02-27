@@ -83,17 +83,27 @@ async fn controller(args: &ArgMatches) {
         .await
         .expect("Failed to connect to relay");
 
-    let ds_client = chat_controller::node::DsClient::new(api_key.into());
+    let ds_client = chat_controller::utils::chat_client::ChatClient::new(api_key.into());
+
+    let ds_proxy_client = chat_controller::utils::ds_proxy_client::DsProxyClient::new(
+        nostr_relay,
+        &keys,
+        "dephy-dsproxy-controller",
+        "d041ea9854f2117b82452457c4e6d6593a96524027cd4032d2f40046deb78d93",
+        4096,
+    )
+    .await
+    .expect("Failed to connect to relay");
 
     let message_handler = chat_controller::node::MessageHandler::new(
         client,
         ds_client,
+        ds_proxy_client,
         solana_keypair_path
             .to_str()
             .expect("Invalid solana keypair path"),
         keys.public_key(),
         admin_pubkey,
-        // machine_pubkeys,
     );
 
     message_handler.run().await
