@@ -33,9 +33,9 @@ pub enum DephyDsProxyMessage {
         initial_request: EventId,
         payload: String,
     },
-    Account {
+    Transaction {
         user: String,
-        tokens: u64,
+        lamports: u64,
     },
 }
 

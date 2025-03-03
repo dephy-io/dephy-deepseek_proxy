@@ -355,9 +355,9 @@ impl MessageHandler {
                 self.client
                     .send_event(
                         mention,
-                        &DephyDsProxyMessage::Account {                           
+                        &DephyDsProxyMessage::Transaction {                           
                             user: parsed_payload.user.clone(),
-                            tokens: 100000
+                            lamports: PAY_AMOUNT
                         },
                     )
                     .await?;
@@ -394,7 +394,7 @@ impl MessageHandler {
 
             DephyDsProxyMessage::Status { .. } => self.update_machine(event).await?,
 
-            DephyDsProxyMessage::Account { .. } => {}
+            DephyDsProxyMessage::Transaction { .. } => {}
         }
         Ok(())
     }
