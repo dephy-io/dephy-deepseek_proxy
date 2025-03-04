@@ -4,29 +4,69 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/nbd-wtf/go-nostr"
 )
 
 // DephyDsProxyStatus 表示设备状态
-type DephyDsProxyStatus uint8
+type DephyDsProxyStatus string
 
 const (
-	StatusAvailable DephyDsProxyStatus = 1
-	StatusWorking   DephyDsProxyStatus = 2
+	StatusAvailable DephyDsProxyStatus = DephyDsProxyStatus(1)
+	StatusWorking   DephyDsProxyStatus = DephyDsProxyStatus(2)
 )
+
+// UnmarshalJSON customizes JSON unmarshaling for DephyDsProxyStatus
+func (s *DephyDsProxyStatus) UnmarshalJSON(b []byte) error {
+	var str string
+	if err := json.Unmarshal(b, &str); err != nil {
+		return err
+	}
+	switch str {
+	case "Available":
+		*s = StatusAvailable
+	case "Working":
+		*s = StatusWorking
+	default:
+		return fmt.Errorf("invalid DephyDsProxyStatus: %s", str)
+	}
+	return nil
+}
 
 // DephyDsProxyStatusReason 表示状态变更原因
 type DephyDsProxyStatusReason uint8
 
 const (
-	ReasonUserRequest   DephyDsProxyStatusReason = 1
-	ReasonAdminRequest  DephyDsProxyStatusReason = 2
-	ReasonUserBehaviour DephyDsProxyStatusReason = 3
-	ReasonReset         DephyDsProxyStatusReason = 4
-	ReasonLockFailed    DephyDsProxyStatusReason = 5
+	ReasonUserRequest   DephyDsProxyStatusReason = DephyDsProxyStatusReason(1)
+	ReasonAdminRequest  DephyDsProxyStatusReason = DephyDsProxyStatusReason(2)
+	ReasonUserBehaviour DephyDsProxyStatusReason = DephyDsProxyStatusReason(3)
+	ReasonReset         DephyDsProxyStatusReason = DephyDsProxyStatusReason(4)
+	ReasonLockFailed    DephyDsProxyStatusReason = DephyDsProxyStatusReason(5)
 )
+
+// UnmarshalJSON customizes JSON unmarshaling for DephyDsProxyStatusReason
+func (r *DephyDsProxyStatusReason) UnmarshalJSON(b []byte) error {
+	var str string
+	if err := json.Unmarshal(b, &str); err != nil {
+		return err
+	}
+	switch str {
+	case "UserRequest":
+		*r = ReasonUserRequest
+	case "AdminRequest":
+		*r = ReasonAdminRequest
+	case "UserBehaviour":
+		*r = ReasonUserBehaviour
+	case "Reset":
+		*r = ReasonReset
+	case "LockFailed":
+		*r = ReasonLockFailed
+
+	default:
+		return fmt.Errorf("invalid DephyDsProxyStatusReason: %s", str)
+	}
+	return nil
+}
 
 // DephyDsProxyMessage 表示 Nostr 事件的内容
 type DephyDsProxyMessage struct {
@@ -55,11 +95,12 @@ type TransactionPayload struct {
 }
 
 type NostrClient struct {
-	relay            *nostr.Relay
-	machinePubkey    string
+	Relay         *nostr.Relay
+	Session       string
+	MachinePubkey string
 }
 
-func NewNostrClient(relayURL, machinePubkey string) (*NostrClient, error) {
+func NewNostrClient(relayURL, session, machinePubkey string) (*NostrClient, error) {
 	ctx := context.Background()
 	relay, err := nostr.RelayConnect(ctx, relayURL)
 	if err != nil {
@@ -67,110 +108,13 @@ func NewNostrClient(relayURL, machinePubkey string) (*NostrClient, error) {
 	}
 
 	return &NostrClient{
-		relay:            relay,
-		machinePubkey:    machinePubkey,
+		Relay:         relay,
+		Session:       session,
+		MachinePubkey: machinePubkey,
 	}, nil
-}
-
-func (c *NostrClient) Relay() *nostr.Relay {
-	return c.relay
-}
-
-func (c *NostrClient) MachinePubkey() string {
-	return c.machinePubkey
-}
-
-func (c *NostrClient) SubscribeTransactions(ctx context.Context, handler func(event nostr.Event)) error {
-	since := nostr.Now()
-
-	filters := nostr.Filters{{
-		Kinds: []int{1573}, 
-		Since: &since,
-		Tags: nostr.TagMap{
-			"s": []string{"dephy-dsproxy-controller"},
-			"p": []string{c.machinePubkey},
-		},
-	}}
-
-	sub, err := c.relay.Subscribe(ctx, filters)
-	if err != nil {
-		return fmt.Errorf("failed to subscribe: %v", err)
-	}
-
-	go func() {
-		defer sub.Unsub() 
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case ev, ok := <-sub.Events:
-				if !ok {
-					log.Println("Event channel closed")
-					return
-				}
-				var msg DephyDsProxyMessage
-				if err := json.Unmarshal([]byte(ev.Content), &msg); err != nil {
-					log.Printf("Failed to parse event content: %v", err)
-					continue
-				}
-
-				// 只处理 Transaction 事件
-				if msg.Transaction != nil {
-					handler(*ev)
-				}
-			case <-sub.EndOfStoredEvents:
-				log.Println("Received EOSE")
-			}
-		}
-	}()
-
-	return nil
 }
 
 // Close 关闭客户端连接
 func (c *NostrClient) Close() {
-	c.relay.Close()
+	c.Relay.Close()
 }
-
-// // 示例使用
-// func main() {
-//     // 配置参数
-//     relayURL := "wss://relay.stoner.com"
-//     controllerPubkey := "your_controller_pubkey" // 替换为实际的公钥
-//     machinePubkey := "your_machine_pubkey"      // 替换为实际的机器公钥
-
-//     // 创建客户端
-//     client, err := NewNostrClient(relayURL, controllerPubkey, machinePubkey)
-//     if err != nil {
-//         log.Fatalf("Failed to create client: %v", err)
-//     }
-//     defer client.Close()
-
-//     // 创建带有超时的上下文
-//     ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-//     defer cancel()
-
-//     // 订阅 Transaction 事件
-//     err = client.SubscribeTransactions(ctx, func(event nostr.Event) {
-//         var msg DephyDsProxyMessage
-//         if err := json.Unmarshal([]byte(event.Content), &msg); err != nil {
-//             log.Printf("Failed to parse event: %v", err)
-//             return
-//         }
-
-//         if msg.Transaction != nil {
-//             fmt.Printf("Received Transaction event:\n")
-//             fmt.Printf("User: %s\n", msg.Transaction.User)
-//             fmt.Printf("Lamports: %d\n", msg.Transaction.Lamports)
-//             fmt.Printf("Event ID: %s\n", event.ID)
-//             fmt.Printf("Created at: %s\n", time.Unix(int64(event.CreatedAt), 0))
-//         }
-//     })
-//     if err != nil {
-//         log.Fatalf("Failed to subscribe: %v", err)
-//     }
-
-//     // 等待订阅完成或超时
-//     <-ctx.Done()
-//     fmt.Println("Subscription ended")
-// }

@@ -32,10 +32,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	db.AutoMigrate(&models.User{}, &models.Conversation{}, &models.Message{})
+	db.AutoMigrate(&models.User{}, &models.Conversation{}, &models.Message{}, &models.TransactionEvent{})
 
 	// Initialize Nostr client (placeholder, use real implementation)
-	nostrClient, err := pkg.NewNostrClient(config.GlobalConfig.Nostr.RelayURL, config.GlobalConfig.Nostr.MachinePubkey)
+	nostrClient, err := pkg.NewNostrClient(config.GlobalConfig.Nostr.RelayURL, config.GlobalConfig.Nostr.Session, config.GlobalConfig.Nostr.MachinePubkey)
 	if err != nil {
 		log.Fatalf("Failed to initialize Nostr client: %v", err)
 	}
@@ -59,8 +59,8 @@ func main() {
 	messageCtrl := controller.NewMessageController(messageLogic)
 	txEventCtrl := controller.NewTxEventController(txEventLogic)
 
-	// Start Nostr listener in a goroutine
-	go txEventCtrl.StartNostrListener()
+	// Start Nostr event listener in a goroutine
+	go txEventCtrl.StartNostrServices()
 
 	// Setup Gin router
 	r := gin.Default()

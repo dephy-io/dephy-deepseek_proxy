@@ -26,3 +26,17 @@ func (d *TransactionEventDAO) GetAllTransactionEvents() ([]models.TransactionEve
 	}
 	return events, nil
 }
+
+// GetLatestCreatedAt retrieves the latest created_at timestamp from stored events
+func (d *TransactionEventDAO) GetLatestCreatedAt() (int64, error) {
+	var latestEvent models.TransactionEvent
+	err := d.db.Order("created_at DESC").First(&latestEvent).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// No events yet, return 0 to start from the beginning
+			return 0, nil
+		}
+		return 0, err
+	}
+	return latestEvent.CreatedAt.Unix(), nil
+}

@@ -93,8 +93,9 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 		Stream:    &streamTrue,
 	}
 
-	// Buffer to collect full response
+	 // Buffer to collect full response and track usage
 	var fullResponse string
+	var finalUsage *pkg.Usage
 
 	// Call chat API with streaming
 	err = l.chatClient.CreateChatCompletionStream(req, func(resp pkg.ChatCompletionResponse) error {
@@ -104,11 +105,20 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 				streamHandler(choice.Message.Content)
 			}
 		}
+		// Capture usage from the final response chunk
+		if resp.Usage.TotalTokens > 0 {
+			finalUsage = resp.Usage
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	// Validate usage data
+	if finalUsage.TotalTokens == 0 {
+		return nil, errors.New("invalid usage data from chat API")
+	}	
 
 	// Only save messages to DB if API call succeeds
 	// Save user's ask
@@ -127,6 +137,12 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 	consumedTokens := uint64(len(fullResponse))
 	if err := l.userDAO.UpdateUserTokens(user.PublicKey, -int64(consumedTokens), int64(consumedTokens)); err != nil {
 		log.Printf("Failed to update user tokens: %v", err)
+	}
+
+	// Update conversation's TotalTokens
+	newTotalTokens := conversation.TotalTokens + uint64(finalUsage.TotalTokens)
+	if err := l.convoDAO.UpdateTotalTokens(conversationID, newTotalTokens); err != nil {
+		log.Printf("Failed to update conversation total tokens: %v", err)
 	}
 
 	return answer, nil
