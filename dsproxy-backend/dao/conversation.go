@@ -16,13 +16,32 @@ func NewConversationDAO(db *gorm.DB) *ConversationDAO {
 }
 
 // CreateConversation creates a new conversation
-func (d *ConversationDAO) CreateConversation(userID uint64) (*models.Conversation, error) {
+func (d *ConversationDAO) CreateConversation(userPubkey string) (*models.Conversation, error) {
 	convo := &models.Conversation{
 		ID:     uuid.New(),
-		UserID: userID,
+		UserPubkey: userPubkey,
 	}
 	if err := d.db.Create(convo).Error; err != nil {
 		return nil, err
 	}
 	return convo, nil
+}
+
+
+// GetConversationsByUserPubkey retrieves all conversations for a given user public key
+func (d *ConversationDAO) GetConversationsByUserPubkey(userPubkey string) ([]models.Conversation, error) {
+    var conversations []models.Conversation
+    if err := d.db.Where("user_pubkey = ?", userPubkey).Order("created_at DESC").Find(&conversations).Error; err != nil {
+        return nil, err
+    }
+    return conversations, nil
+}
+
+// GetConversationByID retrieves a conversation by its ID
+func (d *ConversationDAO) GetConversationByID(conversationID uuid.UUID) (*models.Conversation, error) {
+    var conversation models.Conversation
+    if err := d.db.Where("id = ?", conversationID).First(&conversation).Error; err != nil {
+        return nil, err
+    }
+    return &conversation, nil
 }

@@ -873,24 +873,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chat-controller"
-version = "0.1.0"
-dependencies = [
- "clap",
- "dephy-balance-payment-sdk",
- "futures",
- "nostr",
- "nostr-sdk",
- "reqwest 0.12.12",
- "serde",
- "serde_json",
- "thiserror 2.0.11",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "chrono"
 version = "0.4.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"

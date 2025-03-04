@@ -74,6 +74,14 @@ func NewNostrClient(relayURL, controllerPubkey, machinePubkey string) (*NostrCli
 	}, nil
 }
 
+func (c *NostrClient) Relay() *nostr.Relay {
+	return c.relay
+}
+
+func (c *NostrClient) MachinePubkey() string {
+	return c.machinePubkey
+}
+
 func (c *NostrClient) SubscribeTransactions(ctx context.Context, handler func(event nostr.Event)) error {
 	since := nostr.Now()
 
