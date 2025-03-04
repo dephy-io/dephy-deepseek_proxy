@@ -11,3 +11,4 @@ bun.lockb
 package-lock.json
 data
 tmp
+config.yaml

@@ -56,11 +56,10 @@ type TransactionPayload struct {
 
 type NostrClient struct {
 	relay            *nostr.Relay
-	controllerPubkey string
 	machinePubkey    string
 }
 
-func NewNostrClient(relayURL, controllerPubkey, machinePubkey string) (*NostrClient, error) {
+func NewNostrClient(relayURL, machinePubkey string) (*NostrClient, error) {
 	ctx := context.Background()
 	relay, err := nostr.RelayConnect(ctx, relayURL)
 	if err != nil {
@@ -69,7 +68,6 @@ func NewNostrClient(relayURL, controllerPubkey, machinePubkey string) (*NostrCli
 
 	return &NostrClient{
 		relay:            relay,
-		controllerPubkey: controllerPubkey,
 		machinePubkey:    machinePubkey,
 	}, nil
 }

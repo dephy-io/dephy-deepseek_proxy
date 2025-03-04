@@ -1,8 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"os"
 
+	"dsproxy-backend/config"
 	"dsproxy-backend/controller"
 	"dsproxy-backend/dao"
 	"dsproxy-backend/logic"
@@ -15,15 +18,30 @@ import (
 )
 
 func main() {
+	// Initialize config
+	if len(os.Args) < 2 {
+		log.Fatal("Usage: go run main.go <config.yaml>")
+	}
+	configFile := os.Args[1]
+	if err := config.LoadConfig(configFile); err != nil {
+		log.Fatalf("Failed to load config from %s: %v", configFile, err)
+	}
+
 	// Initialize database
-	dsn := "host=localhost user=postgres password=your_password dbname=your_db port=5432 sslmode=disable"
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(config.GlobalConfig.DSN()), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-
-	// Auto migrate models
 	db.AutoMigrate(&models.User{}, &models.Conversation{}, &models.Message{})
+
+	// Initialize Nostr client (placeholder, use real implementation)
+	nostrClient, err := pkg.NewNostrClient(config.GlobalConfig.Nostr.RelayURL, config.GlobalConfig.Nostr.MachinePubkey)
+	if err != nil {
+		log.Fatalf("Failed to initialize Nostr client: %v", err)
+	}
+
+	// Initialize Chat client (placeholder, use real implementation)
+	chatClient := pkg.NewChatClient(config.GlobalConfig.Chat.APIKey)
 
 	// Initialize DAOs
 	userDAO := dao.NewUserDAO(db)
@@ -31,32 +49,27 @@ func main() {
 	messageDAO := dao.NewMessageDAO(db)
 	txEventDAO := dao.NewTransactionEventDAO(db)
 
-	// Initialize Nostr client (placeholder, use real implementation)
-	nostrClient, err := pkg.NewNostrClient("wss://relay.stoner.com", "controller_pubkey", "machine_pubkey")
-	if err != nil {
-		log.Fatalf("Failed to initialize Nostr client: %v", err)
-	}
+	// Initialize Logics
+	convoLogic := logic.NewConversationLogic(userDAO, convoDAO)
+	messageLogic := logic.NewMessageLogic(userDAO, convoDAO, messageDAO, chatClient)
+	txEventLogic := logic.NewTxEventLogic(userDAO, txEventDAO, nostrClient)
 
-	// Initialize Chat client (placeholder, use real implementation)
-	chatClient := pkg.NewChatClient("api_key")
-
-	// Initialize Logic
-	logicLayer := logic.NewConversationLogic(userDAO, convoDAO, messageDAO, txEventDAO, chatClient, nostrClient)
-
-	// Initialize Controller
-	ctrl := controller.NewConversationController(logicLayer)
+	// Initialize Controllers
+	convoCtrl := controller.NewConversationController(convoLogic)
+	messageCtrl := controller.NewMessageController(messageLogic)
+	txEventCtrl := controller.NewTxEventController(txEventLogic)
 
 	// Start Nostr listener in a goroutine
-	go ctrl.StartNostrListener()
+	go txEventCtrl.StartNostrListener()
 
 	// Setup Gin router
 	r := gin.Default()
-	r.POST("/conversations", ctrl.CreateConversation)
-	r.POST("/conversations/:id/messages", ctrl.AddMessage)
-	r.GET("/conversations/:id/messages", ctrl.GetMessages)
+	r.POST("/conversations", convoCtrl.CreateConversation)
+	r.POST("/conversations/:id/messages", messageCtrl.AddMessage)
+	r.GET("/conversations/:id/messages", messageCtrl.GetMessages)
 
 	// Run server
-	if err := r.Run(":8080"); err != nil {
+	if err := r.Run(fmt.Sprintf(":%d", config.GlobalConfig.Server.Port)); err != nil {
 		log.Fatalf("Failed to run server: %v", err)
 	}
 }
