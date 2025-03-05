@@ -10,17 +10,12 @@ import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure'
 import { Relay } from 'nostr-tools/relay'
 import bs58 from 'bs58'
 import ReactMarkdown from 'react-markdown'
+import { addMessage, createConversation, getConversations, getMessages, getUser, Message, User } from '@/services'
 
 const SIGN_MESSAGE_PREFIX = 'DePHY vending machine/Example:\n'
 const RELAY_ENDPOINT = import.meta.env.VITE_RELAY_ENDPOINT || 'ws://127.0.0.1:8000'
 
-interface Message {
-  role: 'user' | 'assistant'
-  content: string
-}
-
 const MACHINE_PUBKEY = 'd041ea9854f2117b82452457c4e6d6593a96524027cd4032d2f40046deb78d93'
-const CHAT_UUID = '664385e1a27240d7bbcd2ca83212445e'
 
 // define charge status
 type ChargeStatus = 'idle' | 'requested' | 'working' | 'available' | 'error'
@@ -45,12 +40,13 @@ export default function BalancePaymentFeature() {
   const [isChargeDisabled, setIsChargeDisabled] = useState(false)
   const isTabDisabled = chargeStatus !== 'idle' && chargeStatus !== 'available'
 
-  const [messages, setMessages] = useState<Message[]>([])
+  const [userInfo, setUserInfo] = useState<User | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Partial<Message>[]>([])
   const [input, setInput] = useState('')
   const [isAskLoading, setIsAskLoading] = useState(false)
 
   const subscriptionRef1 = useRef<any>(null)
-  const subscriptionRef2 = useRef<any>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -77,10 +73,65 @@ export default function BalancePaymentFeature() {
   }, [program, publicKey])
 
   useEffect(() => {
-    if(selectedTab === 'chat' && sk && relay) {
-      fetchHistory();
-    } 
-  }, [selectedTab, sk, relay])
+    (async() => {
+      if(publicKey) {
+        const userInfoWrapper = await getUser(publicKey.toString());
+        if(userInfoWrapper.error) {
+          toast.error(`get user failed, ${userInfoWrapper.error}`)
+          return
+        }
+        if(!userInfoWrapper.data) {
+          toast.error("get user result undefined")
+          return
+        }
+        setUserInfo(userInfoWrapper.data)
+      }
+    })
+  }, [publicKey])
+
+  useEffect(() => {
+    (async() => {
+      if(selectedTab === 'chat' && publicKey) {
+        if(conversationId) {
+          const messagesWrapper = await getMessages(conversationId)
+          if(messagesWrapper.error) {
+            toast.error(`get messages failed, ${messagesWrapper.error}`)
+            return
+          }
+          if(!messagesWrapper.data) {
+            toast.error("get messages result undefined")
+            return
+          }
+          setMessages(messagesWrapper.data)
+        } else {
+          const userPubkey = publicKey.toString()
+          const convosWrapper = await getConversations(userPubkey)
+          if(convosWrapper.error) {
+            toast.error(`get conversations failed, ${convosWrapper.error}`)
+            return
+          }
+          if(!convosWrapper.data) {
+            toast.error("get conversations result undefined")
+            return
+          }
+          if(convosWrapper.data.length == 0) {
+            const createWrapper = await createConversation(userPubkey)
+            if(createWrapper.error) {
+              toast.error(`create conversations failed, ${createWrapper.error}`)
+              return
+            }
+            if(!createWrapper.data) {
+              toast.error("create conversations result undefined")
+              return
+            }
+            setConversationId(createWrapper.data.id)
+          } else {
+            setConversationId(convosWrapper.data[0].id)
+          }
+        }
+      } 
+    })()
+  }, [selectedTab, publicKey, conversationId])
 
   useEffect(() => {
     if (publicKey) {
@@ -214,7 +265,6 @@ export default function BalancePaymentFeature() {
     if (!publicKey || !program) return
 
     const userAccountPubkey = getUserAccountPubkey(publicKey)
-    console.log('userAccountPubkey:', userAccountPubkey.toString())
     const user = await program.account.userAccount.fetch(userAccountPubkey)
     const userVaultBalance = await program.provider.connection.getBalance(user.vault)
     setVaultBalance(userVaultBalance)
@@ -277,47 +327,25 @@ export default function BalancePaymentFeature() {
       console.error('Wallet not connected')
       return
     }
-    if (!sk) {
-      toast.error('sk not initialized')
+    if (!conversationId) {
+      console.error('conversationId not defined')
       return
     }
-    if (!relay) {
-      toast.error('relay not initialized')
-      return
-    }
-    const newMessages: Message[] = [
-      ...messages,
-      { role: 'user', content: input },
-      { role: 'assistant', content: 'pending...' },
-    ]
-    setMessages(newMessages)
-    setInput('')
-
-    const sTag = 'chat-controller'
-
-    const contentData = {
-      Ask: {
-        name: publicKey.toString(),
-        role: 'user',
-        content: input,
-      },
-    }
-
-    const content = JSON.stringify(contentData)
-
-    let eventTemplate = {
-      kind: 1573,
-      created_at: Math.floor(Date.now() / 1000),
-      tags: [
-        ['s', sTag],
-        ['p', CHAT_UUID],
-      ],
-      content,
-    }
-    const signedEvent = finalizeEvent(eventTemplate, sk)
-    await relay.publish(signedEvent)
-    await listenFromRelay2()
     setIsAskLoading(true)
+    setMessages(prev => [...prev, { role: "user", content: input }]);
+
+    setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+    await addMessage(conversationId, input, "deepseek/deepseek-v3/community", async (newContent: string) => {
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastMessage = newMessages[newMessages.length - 1];
+        if (lastMessage.role === "assistant") {
+            lastMessage.content += newContent;
+        }
+        return newMessages;
+    });
+    })
+    setIsAskLoading(false)
   }
 
   const publishToRelay = async (nonce: number, recoverInfo: any, user: string) => {
@@ -403,146 +431,12 @@ export default function BalancePaymentFeature() {
                 setChargeStatus('available')
                 setIsChargeDisabled(false)
               }
-            } else if (content.Anwser) {
-              let text: string
-              if (content.Anwser.finish_reason !== 'stop') {
-                text = content.Anwser.finish_reason
-              } else {
-                text = content.Anwser.content
-              }
-              setMessages((prevMessages) => [...prevMessages, { role: content.Anwser.role, content: text }])
-            }
+            } 
           } catch (error) {
             console.error('Error parsing event content:', error)
             setChargeStatus('error')
             setEvents((prevEvents) => [...prevEvents, { error: 'Failed to parse event content', rawEvent: event }])
           }
-        },
-        oneose() {
-          console.log('eose received')
-        },
-        onclose(reason) {
-          console.log('close received:', reason)
-        },
-      },
-    )
-  }
-
-  const listenFromRelay2 = async () => {
-    if (!sk) {
-      toast.error('sk not initialized')
-      return
-    }
-    if (!relay) {
-      toast.error('relay not initialized')
-      return
-    }
-
-    // const sTag = selectedTab === 'decharge' ? 'dephy-dsproxy-controller' : 'dephy-gacha-controller'
-
-    // clear old subscription
-    if (subscriptionRef2.current) {
-      subscriptionRef2.current.close()
-    }
-
-    // create new subscription
-    subscriptionRef2.current = relay.subscribe(
-      [
-        {
-          kinds: [1573],
-          since: Math.floor(Date.now() / 1000),
-          '#s': ['chat-controller'],
-          '#p': [CHAT_UUID],
-        },
-      ],
-      {
-        onevent: async (event) => {
-          console.log('event received:', event)
-          setEvents((prevEvents) => [...prevEvents, event])
-          const content = JSON.parse(event.content)
-          try {
-            if (content.Anwser) {
-              let text: string
-              if (content.Anwser.finish_reason !== 'stop') {
-                text = content.Anwser.finish_reason
-              } else {
-                text = content.Anwser.content
-              }
-              // setMessages((prevMessages) => [...prevMessages, { role: content.Anwser.role, content: text }])
-              setMessages((prevMessages) =>
-                prevMessages.slice(0, -1).concat([{ role: content.Anwser.role, content: text }]),
-              )
-            }
-          } catch (error) {
-            toast.error(`Error parsing event content: ${error}`)
-            setMessages((prevMessages) => prevMessages.slice(0, -1))
-          } finally {
-            setIsAskLoading(false)
-          }
-        },
-        oneose() {
-          console.log('eose received')
-        },
-        onclose(reason) {
-          console.log('close received:', reason)
-        },
-      },
-    )
-  }
-
-  const fetchHistory = async () => {
-    if (!sk) {
-      toast.error('sk not initialized')
-      return
-    }
-    if (!relay) {
-      toast.error('relay not initialized')
-      return
-    }
-
-    // clear old subscription
-    if (subscriptionRef2.current) {
-      subscriptionRef2.current.close()
-    }
-
-    // create new subscription
-    subscriptionRef2.current = relay.subscribe(
-      [
-        {
-          kinds: [1573],
-          '#s': ['chat-controller'],
-          '#p': [CHAT_UUID],
-        },
-      ],
-      {
-        onevent: async (event) => {
-          console.log('event received:', event)
-          setEvents((prevEvents) => [...prevEvents, event])
-          const content = JSON.parse(event.content)
-          try {
-            if (content.Anwser) {
-              let text: string
-              if (content.Anwser.finish_reason !== 'stop') {
-                text = content.Anwser.finish_reason
-              } else {
-                text = content.Anwser.content
-              }
-              setMessages((prevMessages) => [...prevMessages, { role: content.Anwser.role, content: text }])
-              // setMessages((prevMessages) =>
-              //   prevMessages.slice(0, -1).concat([{ role: content.Anwser.role, content: text }]),
-              // )
-            }
-            if (content.Ask) {
-              const text = content.Ask.content;
-              setMessages((prevMessages) => [...prevMessages, { role: content.Ask.role, content: text }])
-            }
-          } catch (error) {
-            toast.error(`Error parsing event content: ${error}`)
-            // setMessages((prevMessages) => prevMessages.slice(0, -1))
-          } 
-          // finally {
-          //   setIsAskLoading(false)
-          // }
         },
         oneose() {
           console.log('eose received')
@@ -778,7 +672,7 @@ export default function BalancePaymentFeature() {
           {/* 消息列表 */}
           <div className="flex-1 overflow-auto space-y-4" ref={messagesContainerRef} >
             {messages.map((msg, index) => {
-              const parts = msg.content.split(/<think>(.*?)<\/think>/gs)
+              const parts = msg.content!.split(/<think>(.*?)<\/think>/gs)
               return (
                 <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div
