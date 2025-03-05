@@ -25,7 +25,4 @@ func (c *TxEventController) StartNostrServices() {
 	if err := c.txEventLogic.StartNostrListener(ctx); err != nil {
 		log.Printf("Nostr listener failed: %v", err)
 	}
-	// if err := c.txEventLogic.StartNostrListener(ctx); err != nil {
-	// 	log.Printf("Nostr listener failed: %v", err)
-	// }
 }

@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch with config",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug", 
+            "program": "${workspaceFolder}/dsproxy-backend/main.go",
+            "args": ["./config.yaml"],
+            "env": {},
+            "showLog": true
+        }
+    ]
+}

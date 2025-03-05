@@ -14,7 +14,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-// TxEventLogic handles conversation-related business logic
+// TxEventLogic handles tx_event-related business logic
 type TxEventLogic struct {
 	userDAO     *dao.UserDAO
 	txEventDAO  *dao.TransactionEventDAO
@@ -41,7 +41,7 @@ func (l *TxEventLogic) StartNostrListener(ctx context.Context) error {
 		return fmt.Errorf("failed to get latest created_at: %v", err)
 	}
 
-	log.Printf("Nostr events subscribe since: $v", latestCreatedAt)
+	log.Printf("Nostr events subscribe since: %v", latestCreatedAt)
 
 	since := nostr.Timestamp(latestCreatedAt+1)
 
@@ -75,7 +75,6 @@ func (l *TxEventLogic) StartNostrListener(ctx context.Context) error {
 				continue
 			}
 
-			
 			if msg.Transaction != nil {
 				log.Printf("Transaction event received: %v", ev.ID)
 				txEvent := &models.TransactionEvent{

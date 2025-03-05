@@ -40,3 +40,17 @@ func (l *ConversationLogic) CreateConversation(publicKey string) (*models.Conver
 
 	return l.convoDAO.CreateConversation(user.PublicKey)
 }
+
+// GetConversations retrieves all conversations for a user by public key
+func (l *ConversationLogic) GetConversations(publicKey string) ([]models.Conversation, error) {
+	// Optional: Verify user exists
+	_, err := l.userDAO.GetUserByPublicKey(publicKey)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return []models.Conversation{}, nil // Return empty list if user doesn't exist
+		}
+		return nil, err
+	}
+
+	return l.convoDAO.GetConversationsByUserPubkey(publicKey)
+}

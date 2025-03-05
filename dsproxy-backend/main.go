@@ -50,11 +50,13 @@ func main() {
 	txEventDAO := dao.NewTransactionEventDAO(db)
 
 	// Initialize Logics
+	userLogic := logic.NewUserLogic(userDAO)
 	convoLogic := logic.NewConversationLogic(userDAO, convoDAO)
 	messageLogic := logic.NewMessageLogic(userDAO, convoDAO, messageDAO, chatClient)
 	txEventLogic := logic.NewTxEventLogic(userDAO, txEventDAO, nostrClient)
 
 	// Initialize Controllers
+	userCtrl := controller.NewUserController(userLogic)
 	convoCtrl := controller.NewConversationController(convoLogic)
 	messageCtrl := controller.NewMessageController(messageLogic)
 	txEventCtrl := controller.NewTxEventController(txEventLogic)
@@ -64,9 +66,11 @@ func main() {
 
 	// Setup Gin router
 	r := gin.Default()
+	r.GET("/user", userCtrl.GetUser)
 	r.POST("/conversations", convoCtrl.CreateConversation)
-	r.POST("/conversations/:id/messages", messageCtrl.AddMessage)
-	r.GET("/conversations/:id/messages", messageCtrl.GetMessages)
+	r.GET("/conversations", convoCtrl.GetConversations)
+	r.POST("/messages", messageCtrl.AddMessage)
+	r.GET("/messages", messageCtrl.GetMessages)
 
 	// Run server
 	if err := r.Run(fmt.Sprintf(":%d", config.GlobalConfig.Server.Port)); err != nil {

@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// MessageLogic handles conversation-related business logic
+// MessageLogic handles message-related business logic
 type MessageLogic struct {
 	userDAO    *dao.UserDAO
 	convoDAO   *dao.ConversationDAO
@@ -35,7 +35,7 @@ func NewMessageLogic(
 }
 
 // AddMessageAndCallChat adds a message and calls the chat API, only saves to DB on success
-func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model string, ask string, streamHandler func(string)) (*models.Message, error) {
+func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model string, content string, streamHandler func(string)) (*models.Message, error) {
 	// Fetch all existing messages in the conversation
 	messages, err := l.messageDAO.GetMessagesByConversationID(conversationID)
 	if err != nil {
@@ -66,11 +66,11 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 		return nil, errors.New("insufficient tokens")
 	}
 
-    // Calculate max_tokens: min(remaining context, user tokens)
-    maxTokens := uint32(remainingContextTokens)
-    if user.Tokens < remainingContextTokens {
-        maxTokens = uint32(user.Tokens)
-    }
+	// Calculate max_tokens: min(remaining context, user tokens)
+	maxTokens := uint32(remainingContextTokens)
+	if user.Tokens < remainingContextTokens {
+		maxTokens = uint32(user.Tokens)
+	}
 
 	// Prepare chat request with existing messages plus the new ask
 	var chatMessages []pkg.RequestMessage
@@ -82,32 +82,35 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 	}
 	chatMessages = append(chatMessages, pkg.RequestMessage{
 		Role:    "user",
-		Content: ask,
+		Content: content,
 	})
 
 	streamTrue := true
+	streamOptions := pkg.StreamOptions{
+		IncludeUsage: true,
+	}
 	req := pkg.ChatCompletionRequest{
 		Model:     model,
 		Messages:  chatMessages,
 		MaxTokens: maxTokens,
 		Stream:    &streamTrue,
+		StreamOptions: &streamOptions,
 	}
 
-	 // Buffer to collect full response and track usage
+	// Buffer to collect full response and track usage
 	var fullResponse string
 	var finalUsage *pkg.Usage
 
 	// Call chat API with streaming
-	err = l.chatClient.CreateChatCompletionStream(req, func(resp pkg.ChatCompletionResponse) error {
+	err = l.chatClient.CreateChatCompletionStream(req, func(resp *pkg.StreamChatCompletionResponse) error {
 		for _, choice := range resp.Choices {
-			if choice.Message.Content != "" {
-				fullResponse += choice.Message.Content
-				streamHandler(choice.Message.Content)
+			if choice.Delta.Content != "" {
+				fullResponse += choice.Delta.Content
+				streamHandler(choice.Delta.Content)
 			}
 		}
-		// Capture usage from the final response chunk
-		if resp.Usage.TotalTokens > 0 {
-			finalUsage = resp.Usage
+		if resp.Usage != nil {
+			finalUsage = resp.Usage // 捕获最后一个块的 usage
 		}
 		return nil
 	})
@@ -118,11 +121,11 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 	// Validate usage data
 	if finalUsage.TotalTokens == 0 {
 		return nil, errors.New("invalid usage data from chat API")
-	}	
+	}
 
 	// Only save messages to DB if API call succeeds
 	// Save user's ask
-	_, err = l.messageDAO.CreateMessage(conversationID, "user", ask)
+	_, err = l.messageDAO.CreateMessage(conversationID, "user", content)
 	if err != nil {
 		return nil, err
 	}
