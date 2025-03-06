@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 
-	"dsproxy-backend/config"
 	"dsproxy-backend/dao"
 	"dsproxy-backend/models"
 	"dsproxy-backend/pkg"
@@ -53,10 +52,11 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 	}
 
 	// Check available context and user tokens
-	remainingContextTokens := uint64(config.GlobalConfig.Chat.MaxContextTokens) - conversation.TotalTokens
-	if remainingContextTokens < 1 {
-		return nil, errors.New("conversation context limit exceeded")
-	}
+	// remainingContextTokens := uint64(config.GlobalConfig.Chat.MaxContextTokens) - conversation.TotalTokens
+	// if remainingContextTokens < 1 {
+	// 	return nil, errors.New("conversation context limit exceeded")
+	// }
+	var remainingContextTokens uint64 = 4000
 	if user.Tokens < 1 {
 		return nil, errors.New("insufficient tokens")
 	}
@@ -90,10 +90,10 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 		IncludeUsage: true,
 	}
 	req := pkg.ChatCompletionRequest{
-		Model:     model,
-		Messages:  chatMessages,
-		MaxTokens: maxTokens,
-		Stream:    &streamTrue,
+		Model:         model,
+		Messages:      chatMessages,
+		MaxTokens:     maxTokens,
+		Stream:        &streamTrue,
 		StreamOptions: &streamOptions,
 	}
 

@@ -41,7 +41,7 @@ export default function BalancePaymentFeature() {
   const isTabDisabled = chargeStatus !== 'idle' && chargeStatus !== 'available'
 
   const [userInfo, setUserInfo] = useState<User | null>(null)
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Partial<Message>[]>([])
   const [input, setInput] = useState('')
   const [isAskLoading, setIsAskLoading] = useState(false)
@@ -73,55 +73,55 @@ export default function BalancePaymentFeature() {
   }, [program, publicKey])
 
   useEffect(() => {
-    (async() => {
-      if(publicKey) {
-        const userInfoWrapper = await getUser(publicKey.toString());
-        if(userInfoWrapper.error) {
+    ;(async () => {
+      if (publicKey) {
+        const userInfoWrapper = await getUser(publicKey.toString())
+        if (userInfoWrapper.error) {
           toast.error(`get user failed, ${userInfoWrapper.error}`)
           return
         }
-        if(!userInfoWrapper.data) {
-          toast.error("get user result undefined")
+        if (!userInfoWrapper.data) {
+          toast.error('get user result undefined')
           return
         }
         setUserInfo(userInfoWrapper.data)
       }
-    })
+    })()
   }, [publicKey])
 
   useEffect(() => {
-    (async() => {
-      if(selectedTab === 'chat' && publicKey) {
-        if(conversationId) {
+    ;(async () => {
+      if (selectedTab === 'chat' && publicKey) {
+        if (conversationId) {
           const messagesWrapper = await getMessages(conversationId)
-          if(messagesWrapper.error) {
+          if (messagesWrapper.error) {
             toast.error(`get messages failed, ${messagesWrapper.error}`)
             return
           }
-          if(!messagesWrapper.data) {
-            toast.error("get messages result undefined")
+          if (!messagesWrapper.data) {
+            toast.error('get messages result undefined')
             return
           }
           setMessages(messagesWrapper.data)
         } else {
           const userPubkey = publicKey.toString()
           const convosWrapper = await getConversations(userPubkey)
-          if(convosWrapper.error) {
+          if (convosWrapper.error) {
             toast.error(`get conversations failed, ${convosWrapper.error}`)
             return
           }
-          if(!convosWrapper.data) {
-            toast.error("get conversations result undefined")
+          if (!convosWrapper.data) {
+            toast.error('get conversations result undefined')
             return
           }
-          if(convosWrapper.data.length == 0) {
+          if (convosWrapper.data.length == 0) {
             const createWrapper = await createConversation(userPubkey)
-            if(createWrapper.error) {
+            if (createWrapper.error) {
               toast.error(`create conversations failed, ${createWrapper.error}`)
               return
             }
-            if(!createWrapper.data) {
-              toast.error("create conversations result undefined")
+            if (!createWrapper.data) {
+              toast.error('create conversations result undefined')
               return
             }
             setConversationId(createWrapper.data.id)
@@ -129,7 +129,7 @@ export default function BalancePaymentFeature() {
             setConversationId(convosWrapper.data[0].id)
           }
         }
-      } 
+      }
     })()
   }, [selectedTab, publicKey, conversationId])
 
@@ -142,7 +142,7 @@ export default function BalancePaymentFeature() {
   }, [publicKey])
 
   useEffect(() => {
-    (async () => {
+    ;(async () => {
       const sk = generateSecretKey()
       setSk(sk)
 
@@ -332,18 +332,30 @@ export default function BalancePaymentFeature() {
       return
     }
     setIsAskLoading(true)
-    setMessages(prev => [...prev, { role: "user", content: input }]);
+    setMessages((prev) => [...prev, { role: 'user', content: input }])
 
-    setMessages(prev => [...prev, { role: "assistant", content: "" }]);
-    await addMessage(conversationId, input, "deepseek/deepseek-v3/community", async (newContent: string) => {
-      setMessages(prev => {
-        const newMessages = [...prev];
-        const lastMessage = newMessages[newMessages.length - 1];
-        if (lastMessage.role === "assistant") {
-            lastMessage.content += newContent;
+    setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
+    await addMessage(conversationId, input, 'deepseek/deepseek-v3/community', async (newContent: string) => {
+      console.log('newContent:', newContent)
+      setMessages((prev) => {
+        const newMessages = [...prev]
+        const lastIndex = newMessages.length - 1
+
+        // 防御性检查
+        if (lastIndex < 0) return prev
+
+        const lastMessage = newMessages[lastIndex]
+
+        // 必须创建新对象保证不可变性
+        if (lastMessage.role === 'assistant') {
+          newMessages[lastIndex] = {
+            ...lastMessage, // 展开原有属性
+            content: lastMessage.content + newContent, // 创建新字符串
+          }
         }
-        return newMessages;
-    });
+
+        return newMessages
+      })
     })
     setIsAskLoading(false)
   }
@@ -431,7 +443,7 @@ export default function BalancePaymentFeature() {
                 setChargeStatus('available')
                 setIsChargeDisabled(false)
               }
-            } 
+            }
           } catch (error) {
             console.error('Error parsing event content:', error)
             setChargeStatus('error')
@@ -585,18 +597,28 @@ export default function BalancePaymentFeature() {
               {userAccount ? (
                 <div className="space-y-2">
                   <p>
-                    <span className="font-semibold">Nonce:</span> <span>{userAccount.nonce.toString()}</span>
+                    <span className="font-semibold text-sm">Nonce:</span> {' '}
+                    <span className="text-sm">{userAccount.nonce.toString()}</span>
                   </p>
                   <p>
-                    <span className="font-semibold">Locked Amount:</span>{' '}
-                    <span>{userAccount.lockedAmount.toNumber() / 10 ** 9} SOL</span>
+                    <span className="font-semibold text-sm">Locked Amount:</span>{' '}
+                    <span className="text-sm">{userAccount.lockedAmount.toNumber() / 10 ** 9} SOL</span>
                   </p>
                   <p>
-                    <span className="font-semibold">Vault:</span> <span>{userAccount.vault.toString()}</span>
+                    <span className="font-semibold text-sm">Vault:</span> {' '}
+                    <span className="text-xs">{userAccount.vault.toString()}</span>
                   </p>
                   <p>
-                    <span className="font-semibold">Vault Balance:</span>{' '}
-                    <span>{vaultBalance ? `${vaultBalance / 10 ** 9} SOL` : 'Loading...'}</span>
+                    <span className="font-semibold text-sm">Vault Balance:</span>{' '}
+                    <span className="text-sm">{vaultBalance ? `${vaultBalance / 10 ** 9} SOL` : 'Loading...'}</span>
+                  </p>
+                  <p>
+                    <span className="font-semibold text-sm">Tokens:</span>{' '}
+                    <span className="text-sm">{userInfo ? `${userInfo.tokens}` : 'Loading...'}</span>
+                  </p>
+                  <p>
+                    <span className="font-semibold text-sm">Tokens Consumed:</span>{' '}
+                    <span className="text-sm">{userInfo ? `${userInfo.tokens_consumed}` : 'Loading...'}</span>
                   </p>
                 </div>
               ) : (
@@ -670,7 +692,7 @@ export default function BalancePaymentFeature() {
       ) : (
         <div className="w-full p-4 flex flex-col h-[80vh]">
           {/* 消息列表 */}
-          <div className="flex-1 overflow-auto space-y-4" ref={messagesContainerRef} >
+          <div className="flex-1 overflow-auto space-y-4" ref={messagesContainerRef}>
             {messages.map((msg, index) => {
               const parts = msg.content!.split(/<think>(.*?)<\/think>/gs)
               return (

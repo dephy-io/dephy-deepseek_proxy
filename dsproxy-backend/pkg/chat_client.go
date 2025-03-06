@@ -106,7 +106,6 @@ func (c *ChatClient) post(endpoint string, body interface{}) (*http.Response, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request body: %v", err)
 	}
-    log.Printf("Request body: %s", string(jsonBody)) // 打印实际请求体
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
@@ -140,7 +139,6 @@ func (c *ChatClient) CreateChatCompletionStream(request ChatCompletionRequest, h
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
-		log.Printf("Stream line: %s", line)
 
 		if line == "" || !strings.HasPrefix(line, "data: ") {
 			continue

@@ -38,7 +38,9 @@ func (c *MessageController) AddMessage(ctx *gin.Context) {
 	ctx.Header("Connection", "keep-alive")
 
 	msg, err := c.messageLogic.AddMessageAndCallChat(req.ConvoID, req.Model, req.Content, func(content string) {
-		ctx.SSEvent("message", content)
+		ctx.SSEvent("message", gin.H{
+			"content": content,
+		})
 		ctx.Writer.Flush()
 	})
 	if err != nil {

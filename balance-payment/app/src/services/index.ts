@@ -23,12 +23,16 @@ export interface Message {
     created_at: string;
 }
 
+interface SSEMessage {
+    content: string;
+}
+
 interface ApiResponse<T> {
     data?: T;
     error?: string;
 }
 
-const BASE_URL = "http://localhost:8080";
+const BASE_URL = "/api";
 
 export async function getUser(publicKey: string): Promise<ApiResponse<User>> {
     try {
@@ -56,7 +60,7 @@ export async function createConversation(publicKey: string): Promise<ApiResponse
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({ public_key: publicKey }),
+            body: JSON.stringify({ user_pubkey: publicKey }),
         });
         const data = await response.json();
         if (!response.ok) {
@@ -71,7 +75,7 @@ export async function createConversation(publicKey: string): Promise<ApiResponse
 // 获取会话列表 (GET /conversations)
 export async function getConversations(publicKey: string): Promise<ApiResponse<Conversation[]>> {
     try {
-        const response = await fetch(`${BASE_URL}/conversations?public_key=${encodeURIComponent(publicKey)}`, {
+        const response = await fetch(`${BASE_URL}/conversations?user_pubkey=${encodeURIComponent(publicKey)}`, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",
@@ -126,23 +130,14 @@ export async function addMessage(
             if (done) break;
 
             const chunk = decoder.decode(value);
-            const lines = chunk.split("\n");
-            for (const line of lines) {
-                if (line.startsWith("data: ")) {
-                    const jsonData = line.slice(6);
-                    if (jsonData === "[DONE]") continue;
-
-                    const event = JSON.parse(jsonData);
-                    if (event.event === "message") {
-                        fullContent += event.data;
-                        await handler(event.data); // 调用 UI 处理函数
-                    } else if (event.event === "done") {
-                        doneMessage = event.data;
-                    } else if (event.event === "error") {
-                        return { error: event.data };
-                    }
-                }
+            if(chunk.startsWith("event:done")){
+                break
             }
+            const sseMsgStr = chunk.split("event:message\ndata:")[1]
+            const ssgMsg: SSEMessage = JSON.parse(sseMsgStr);
+            const content = ssgMsg.content
+            fullContent += content
+            await handler(content)
         }
 
         return doneMessage ? { data: doneMessage } : { error: "No message returned" };
