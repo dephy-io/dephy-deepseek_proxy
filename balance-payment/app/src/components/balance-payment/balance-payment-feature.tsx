@@ -10,7 +10,16 @@ import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure'
 import { Relay } from 'nostr-tools/relay'
 import bs58 from 'bs58'
 import ReactMarkdown from 'react-markdown'
-import { addMessage, createConversation, getConversations, getMessages, getUser, Message, User } from '@/services'
+import {
+  addMessage,
+  Conversation,
+  createConversation,
+  getConversations,
+  getMessages,
+  getUser,
+  Message,
+  User,
+} from '@/services'
 
 const SIGN_MESSAGE_PREFIX = 'DePHY vending machine/Example:\n'
 const RELAY_ENDPOINT = import.meta.env.VITE_RELAY_ENDPOINT || 'ws://127.0.0.1:8000'
@@ -42,6 +51,7 @@ export default function BalancePaymentFeature() {
 
   const [userInfo, setUserInfo] = useState<User | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<Conversation[]>([])
   const [messages, setMessages] = useState<Partial<Message>[]>([])
   const [input, setInput] = useState('')
   const [isAskLoading, setIsAskLoading] = useState(false)
@@ -114,6 +124,7 @@ export default function BalancePaymentFeature() {
             toast.error('get conversations result undefined')
             return
           }
+          setConversations(convosWrapper.data)
           if (convosWrapper.data.length == 0) {
             const createWrapper = await createConversation(userPubkey)
             if (createWrapper.error) {
@@ -321,6 +332,29 @@ export default function BalancePaymentFeature() {
     }
   }
 
+  const handleNewConversation = async () => {
+    if (!publicKey) {
+      console.error('Wallet not connected')
+      return
+    }
+    const convoWrapper = await createConversation(publicKey.toString())
+    if (convoWrapper.error) {
+      toast.error(`create conversation failed, ${convoWrapper.error}`)
+      return
+    }
+    if (!convoWrapper.data) {
+      toast.error('create conversation result undefined')
+      return
+    }
+    const convos = [convoWrapper.data, ...conversations]
+    setConversations(convos)
+    setConversationId(convoWrapper.data.id)
+  }
+
+  const handleSelectConversation = (id: string) => {
+    setConversationId(id)
+  }
+
   const handleAsk = async () => {
     if (!input.trim()) return
     if (!publicKey) {
@@ -332,6 +366,7 @@ export default function BalancePaymentFeature() {
       return
     }
     setIsAskLoading(true)
+    setInput('')
     setMessages((prev) => [...prev, { role: 'user', content: input }])
 
     setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
@@ -597,7 +632,7 @@ export default function BalancePaymentFeature() {
               {userAccount ? (
                 <div className="space-y-2">
                   <p>
-                    <span className="font-semibold text-sm">Nonce:</span> {' '}
+                    <span className="font-semibold text-sm">Nonce:</span>{' '}
                     <span className="text-sm">{userAccount.nonce.toString()}</span>
                   </p>
                   <p>
@@ -605,7 +640,7 @@ export default function BalancePaymentFeature() {
                     <span className="text-sm">{userAccount.lockedAmount.toNumber() / 10 ** 9} SOL</span>
                   </p>
                   <p>
-                    <span className="font-semibold text-sm">Vault:</span> {' '}
+                    <span className="font-semibold text-sm">Vault:</span>{' '}
                     <span className="text-xs">{userAccount.vault.toString()}</span>
                   </p>
                   <p>
@@ -690,61 +725,112 @@ export default function BalancePaymentFeature() {
           </div>
         </>
       ) : (
-        <div className="w-full p-4 flex flex-col h-[80vh]">
-          {/* 消息列表 */}
-          <div className="flex-1 overflow-auto space-y-4" ref={messagesContainerRef}>
-            {messages.map((msg, index) => {
-              const parts = msg.content!.split(/<think>(.*?)<\/think>/gs)
-              return (
-                <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div
-                    className={`p-3 rounded-lg shadow ${msg.role === 'user' ? 'bg-blue-100' : 'bg-gray-100 max-w-4xl w-full'}`}
-                  >
-                    {parts.map((part, i) =>
-                      i % 2 === 0 ? (
-                        <ReactMarkdown key={i}>{part}</ReactMarkdown>
-                      ) : (
-                        <span key={i} className="text-xs text-gray-500 block leading-tight mb-2">
-                          {'>>'}
-                          {part}
-                        </span>
-                      ),
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* 输入框和按钮 */}
-          <div className="mt-4 flex items-center border-t pt-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
-              className="flex-1 p-2 border rounded-lg mr-2"
-              placeholder="Ask DeepSeek"
-            />
-            <button onClick={handleAsk} className="px-4 py-2 bg-pink-500 text-white rounded-lg" disabled={isAskLoading}>
-              {isAskLoading ? (
+        <div className="w-full h-[70vh] flex">
+          {/* 左侧对话列表 */}
+          <div className="w-44 border-r p-4 overflow-auto flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <button
+                className="p-1 bg-pink-500 text-white rounded hover:bg-pink-600"
+                onClick={handleNewConversation}
+                aria-label="New Conversation"
+              >
                 <svg
-                  className="animate-spin h-5 w-5 text-white"
                   xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5"
                   fill="none"
                   viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
                 >
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
                 </svg>
-              ) : (
-                'Ask'
-              )}
-            </button>
+              </button>
+            </div>
+            <div className="flex-1 space-y-2">
+              {conversations.map((conversation) => (
+                <div
+                  key={conversation.id}
+                  className={`p-1 rounded-lg cursor-pointer ${conversationId === conversation.id ? 'bg-gray-100' : ''}`}
+                  onClick={() => handleSelectConversation(conversation.id)}
+                >
+                  {conversation.id}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 右侧聊天区域 */}
+          <div className="flex-1 min-w-[700px] p-4 flex flex-col">
+            {/* 消息列表 */}
+            <div className="flex-1 overflow-auto space-y-4" ref={messagesContainerRef}>
+              {messages.map((msg, index) => {
+                const parts = msg.content!.split(/<think>(.*?)<\/think>/gs)
+                return (
+                  <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      className={`p-3 rounded-lg shadow ${msg.role === 'user' ? 'bg-blue-100' : 'bg-gray-100 max-w-4xl w-full'}`}
+                    >
+                      {parts.map((part, i) =>
+                        i % 2 === 0 ? (
+                          <ReactMarkdown key={i}>{part}</ReactMarkdown>
+                        ) : (
+                          <span key={i} className="text-xs text-gray-500 block leading-tight mb-2">
+                            {'>>'}
+                            {part}
+                          </span>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* 输入框和按钮 */}
+            <div className="mt-4 flex items-center border-t pt-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
+                className="flex-1 p-2 border rounded-lg mr-2"
+                placeholder="Ask DeepSeek"
+              />
+              <button
+                onClick={handleAsk}
+                className="px-4 py-2 bg-pink-500 text-white rounded-lg"
+                disabled={isAskLoading}
+              >
+                {isAskLoading ? (
+                  <svg
+                    className="animate-spin h-5 w-5 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                ) : (
+                  'Ask'
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

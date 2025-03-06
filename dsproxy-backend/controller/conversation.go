@@ -20,7 +20,7 @@ func NewConversationController(logic *logic.ConversationLogic) *ConversationCont
 // CreateConversation handles POST /conversations
 func (c *ConversationController) CreateConversation(ctx *gin.Context) {
 	type Request struct {
-		PublicKey string `json:"public_key" binding:"required"`
+		UserPubkey string `json:"user_pubkey" binding:"required"`
 	}
 	var req Request
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -28,7 +28,7 @@ func (c *ConversationController) CreateConversation(ctx *gin.Context) {
 		return
 	}
 
-	convo, err := c.convoLogic.CreateConversation(req.PublicKey)
+	convo, err := c.convoLogic.CreateConversation(req.UserPubkey)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
