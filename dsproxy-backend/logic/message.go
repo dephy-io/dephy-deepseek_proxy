@@ -85,6 +85,8 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 		Content: content,
 	})
 
+	log.Println("model:", model)
+
 	streamTrue := true
 	streamOptions := pkg.StreamOptions{
 		IncludeUsage: true,

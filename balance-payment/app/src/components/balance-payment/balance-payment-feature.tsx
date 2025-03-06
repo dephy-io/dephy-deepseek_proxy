@@ -55,6 +55,7 @@ export default function BalancePaymentFeature() {
   const [messages, setMessages] = useState<Partial<Message>[]>([])
   const [input, setInput] = useState('')
   const [isAskLoading, setIsAskLoading] = useState(false)
+  const [aiModel, setAIModel] = useState<"deepseek/deepseek-v3/community" | "deepseek/deepseek-r1/community">("deepseek/deepseek-v3/community")
 
   const subscriptionRef1 = useRef<any>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -355,6 +356,14 @@ export default function BalancePaymentFeature() {
     setConversationId(id)
   }
 
+  const handleDeepThink = () => {
+    if(aiModel === "deepseek/deepseek-v3/community") {
+      setAIModel("deepseek/deepseek-r1/community")
+    } else {
+      setAIModel("deepseek/deepseek-v3/community")
+    }
+  }
+
   const handleAsk = async () => {
     if (!input.trim()) return
     if (!publicKey) {
@@ -370,8 +379,7 @@ export default function BalancePaymentFeature() {
     setMessages((prev) => [...prev, { role: 'user', content: input }])
 
     setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
-    await addMessage(conversationId, input, 'deepseek/deepseek-v3/community', async (newContent: string) => {
-      console.log('newContent:', newContent)
+    await addMessage(conversationId, input, aiModel, async (newContent: string) => {
       setMessages((prev) => {
         const newMessages = [...prev]
         const lastIndex = newMessages.length - 1
@@ -791,45 +799,67 @@ export default function BalancePaymentFeature() {
             </div>
 
             {/* 输入框和按钮 */}
-            <div className="mt-4 flex items-center border-t pt-2">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
-                className="flex-1 p-2 border rounded-lg mr-2"
-                placeholder="Ask DeepSeek"
-              />
-              <button
-                onClick={handleAsk}
-                className="px-4 py-2 bg-pink-500 text-white rounded-lg"
-                disabled={isAskLoading}
-              >
-                {isAskLoading ? (
-                  <svg
-                    className="animate-spin h-5 w-5 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
+            <div className="mt-4 border-t pt-2">
+              {/* 第一行：输入框 */}
+              <div className="mb-2 w-full">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="Ask DeepSeek"
+                />
+              </div>
+
+              {/* 第二行：操作按钮组 */}
+              <div className="flex justify-end items-center gap-4">
+                {/* 模型切换标签 */}
+                <div className="flex items-center">
+                  <button
+                    onClick={handleDeepThink}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors 
+                      ${aiModel === 'deepseek/deepseek-r1/community' ? 'bg-pink-500' : 'bg-gray-300'}`}
                   >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                ) : (
-                  'Ask'
-                )}
-              </button>
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                      ${aiModel === 'deepseek/deepseek-r1/community' ? 'translate-x-6' : 'translate-x-1'}`}
+                    />
+                  </button>
+                  <span className="ml-2 text-sm text-gray-600">DeepThink</span>
+                </div>
+
+                {/* Ask按钮 */}
+                <button
+                  onClick={handleAsk}
+                  className="px-4 py-2 bg-pink-500 text-white rounded-lg flex items-center justify-center gap-2"
+                  disabled={isAskLoading}
+                >
+                  {isAskLoading ? (
+                    <svg
+                      className="animate-spin h-5 w-5 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                  ) : (
+                    'Ask'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
