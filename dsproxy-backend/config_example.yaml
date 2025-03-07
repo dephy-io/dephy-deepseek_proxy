@@ -17,7 +17,7 @@ nostr:
 
 chat:
   api_key: "api_key"
-  max_context_tokens: 65536
+  max_context_tokens: 4000
   
 server:
   port: 8080  
