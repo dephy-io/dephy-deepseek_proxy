@@ -24,6 +24,10 @@ func (d *UserDAO) CreateUser(publicKey string) (*models.User, error) {
 	return user, nil
 }
 
+func (d *UserDAO) SaveUser(user *models.User) error {
+	return d.db.Save(user).Error
+}
+
 // GetUserByPublicKey retrieves a user by public key
 func (d *UserDAO) GetUserByPublicKey(publicKey string) (*models.User, error) {
 	var user models.User

@@ -9,6 +9,7 @@ import (
 	"dsproxy-backend/controller"
 	"dsproxy-backend/dao"
 	"dsproxy-backend/logic"
+	"dsproxy-backend/middleware"
 	"dsproxy-backend/models"
 	"dsproxy-backend/pkg"
 
@@ -58,7 +59,7 @@ func main() {
 	// Initialize Controllers
 	userCtrl := controller.NewUserController(userLogic)
 	convoCtrl := controller.NewConversationController(convoLogic)
-	messageCtrl := controller.NewMessageController(messageLogic)
+	messageCtrl := controller.NewMessageController(messageLogic, convoLogic)
 	txEventCtrl := controller.NewTxEventController(txEventLogic)
 
 	// Start Nostr event listener in a goroutine
@@ -66,11 +67,12 @@ func main() {
 
 	// Setup Gin router
 	r := gin.Default()
-	r.GET("/user", userCtrl.GetUser)
-	r.POST("/conversations", convoCtrl.CreateConversation)
-	r.GET("/conversations", convoCtrl.GetConversations)
-	r.POST("/messages", messageCtrl.AddMessage)
-	r.GET("/messages", messageCtrl.GetMessages)
+	r.POST("/user/login", userCtrl.Login)
+	r.GET("/user", middleware.Auth, userCtrl.GetUser)
+	r.POST("/conversations", middleware.Auth, convoCtrl.CreateConversation)
+	r.GET("/conversations", middleware.Auth, convoCtrl.GetConversations)
+	r.POST("/messages", middleware.Auth, messageCtrl.AddMessage)
+	r.GET("/messages", middleware.Auth, messageCtrl.GetMessages)
 
 	// Run server
 	if err := r.Run(fmt.Sprintf(":%d", config.GlobalConfig.Server.Port)); err != nil {

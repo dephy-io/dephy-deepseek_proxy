@@ -5,8 +5,10 @@ go 1.23.1
 toolchain go1.23.6
 
 require (
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
+	github.com/mr-tron/base58 v1.2.0
 	github.com/nbd-wtf/go-nostr v0.50.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/postgres v1.5.11

@@ -13,10 +13,11 @@ import (
 // MessageController handles HTTP requests
 type MessageController struct {
 	messageLogic *logic.MessageLogic
+	convoLogic   *logic.ConversationLogic
 }
 
-func NewMessageController(logic *logic.MessageLogic) *MessageController {
-	return &MessageController{messageLogic: logic}
+func NewMessageController(messageLogic *logic.MessageLogic, convoLogic *logic.ConversationLogic) *MessageController {
+	return &MessageController{messageLogic: messageLogic, convoLogic: convoLogic}
 }
 
 // AddMessage handles POST /messages
@@ -66,6 +67,24 @@ func (c *MessageController) GetMessages(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid conversation_id: %v", err)})
 		return
 	}
+
+	userPubkey, err := extractUserPubkey(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	conversation, err := c.convoLogic.GetConversationByID(convoID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("no conversation found: %v", err)})
+		return
+	}
+
+	if conversation.UserPubkey != userPubkey {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("the conversation not matched to the user pubkey: %v", err)})
+		return
+	}
+
 	messages, err := c.messageLogic.GetConversationMessages(convoID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

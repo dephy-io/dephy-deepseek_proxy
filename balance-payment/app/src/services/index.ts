@@ -23,6 +23,12 @@ export interface Message {
     created_at: string;
 }
 
+interface LoginResponse {
+    token: string;
+    user: string;
+    expire_at: string; // ISO 8601 格式
+}
+
 interface SSEMessage {
     content: string;
 }
@@ -34,12 +40,64 @@ interface ApiResponse<T> {
 
 const BASE_URL = "/api";
 
-export async function getUser(publicKey: string): Promise<ApiResponse<User>> {
+const AUTH_DATA_KEY = "auth_data";
+
+export const getAuthData = (): LoginResponse | null => {
+    const authData = localStorage.getItem(AUTH_DATA_KEY);
+    if (!authData) return null;
+
+    const data = JSON.parse(authData) as LoginResponse;
+    const expireAt = new Date(data.expire_at);
+    if (isNaN(expireAt.getTime()) || expireAt <= new Date()) {
+        // Token 已过期，清除本地存储
+        localStorage.removeItem(AUTH_DATA_KEY);
+        return null;
+    }
+
+    return data;
+};
+
+const setAuthData = (data: LoginResponse) => {
+    localStorage.setItem(AUTH_DATA_KEY, JSON.stringify(data));
+};
+
+export async function login(
+    publicKey: string,
+    message: string,
+    signature: string
+): Promise<ApiResponse<{ token: string; user: User }>> {
     try {
-        const response = await fetch(`${BASE_URL}/user?user_pubkey=${encodeURIComponent(publicKey)}`, {
+        const response = await fetch(`${BASE_URL}/user/login`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ user_pubkey: publicKey, message, signature }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            return { error: data.error || "Failed to login" };
+        }
+        setAuthData(data as LoginResponse);
+        return { data };
+    } catch (error) {
+        return { error: error instanceof Error ? error.message : "Network error" };
+    }
+}
+
+// 获取用户 (GET /user)
+export async function getUser(): Promise<ApiResponse<User>> {
+    try {
+        const authData = getAuthData();
+        if (!authData) {
+            return { error: "No valid authentication data found, please login again" };
+        }
+
+        const response = await fetch(`${BASE_URL}/user`, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",
+                "Authorization": `Bearer ${authData.token}`,
             },
         });
         const data = await response.json();
@@ -53,14 +111,21 @@ export async function getUser(publicKey: string): Promise<ApiResponse<User>> {
 }
 
 // 创建会话 (POST /conversations)
-export async function createConversation(publicKey: string): Promise<ApiResponse<Conversation>> {
+export async function createConversation(): Promise<ApiResponse<Conversation>> {
     try {
+        const authData = getAuthData();
+        if (!authData) {
+            return { error: "No valid authentication data found, please login again" };
+        }
+
         const response = await fetch(`${BASE_URL}/conversations`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
+                "Authorization": `Bearer ${authData.token}`,
             },
-            body: JSON.stringify({ user_pubkey: publicKey }),
+            // 假设后端从 token 中提取 user_pubkey
+            body: JSON.stringify({}),
         });
         const data = await response.json();
         if (!response.ok) {
@@ -73,12 +138,18 @@ export async function createConversation(publicKey: string): Promise<ApiResponse
 }
 
 // 获取会话列表 (GET /conversations)
-export async function getConversations(publicKey: string): Promise<ApiResponse<Conversation[]>> {
+export async function getConversations(): Promise<ApiResponse<Conversation[]>> {
     try {
-        const response = await fetch(`${BASE_URL}/conversations?user_pubkey=${encodeURIComponent(publicKey)}`, {
+        const authData = getAuthData();
+        if (!authData) {
+            return { error: "No valid authentication data found, please login again" };
+        }
+
+        const response = await fetch(`${BASE_URL}/conversations`, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",
+                "Authorization": `Bearer ${authData.token}`,
             },
         });
         const data = await response.json();
@@ -96,13 +167,19 @@ export async function addMessage(
     conversationId: string,
     content: string,
     model: string,
-    handler: (content: string) => Promise<void> // 新增 UI 处理函数
+    handler: (content: string) => Promise<void>
 ): Promise<ApiResponse<Message>> {
     try {
+        const authData = getAuthData();
+        if (!authData) {
+            return { error: "No valid authentication data found, please login again" };
+        }
+
         const response = await fetch(`${BASE_URL}/messages`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
+                "Authorization": `Bearer ${authData.token}`,
             },
             body: JSON.stringify({
                 conversation_id: conversationId,
@@ -130,14 +207,14 @@ export async function addMessage(
             if (done) break;
 
             const chunk = decoder.decode(value);
-            if(chunk.startsWith("event:done")){
-                break
+            if (chunk.startsWith("event:done")) {
+                break;
             }
-            const sseMsgStr = chunk.split("event:message\ndata:")[1]
-            const ssgMsg: SSEMessage = JSON.parse(sseMsgStr);
-            const content = ssgMsg.content
-            fullContent += content
-            await handler(content)
+            const sseMsgStr = chunk.split("event:message\ndata:")[1];
+            const sseMsg: SSEMessage = JSON.parse(sseMsgStr);
+            const content = sseMsg.content;
+            fullContent += content;
+            await handler(content);
         }
 
         return doneMessage ? { data: doneMessage } : { error: "No message returned" };
@@ -149,10 +226,16 @@ export async function addMessage(
 // 获取消息列表 (GET /messages)
 export async function getMessages(conversationId: string): Promise<ApiResponse<Message[]>> {
     try {
+        const authData = getAuthData();
+        if (!authData) {
+            return { error: "No valid authentication data found, please login again" };
+        }
+
         const response = await fetch(`${BASE_URL}/messages?conversation_id=${encodeURIComponent(conversationId)}`, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",
+                "Authorization": `Bearer ${authData.token}`,
             },
         });
         const data = await response.json();

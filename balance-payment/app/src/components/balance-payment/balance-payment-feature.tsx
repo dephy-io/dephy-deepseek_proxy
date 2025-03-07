@@ -14,9 +14,11 @@ import {
   addMessage,
   Conversation,
   createConversation,
+  getAuthData,
   getConversations,
   getMessages,
   getUser,
+  login,
   Message,
   User,
 } from '@/services'
@@ -55,7 +57,10 @@ export default function BalancePaymentFeature() {
   const [messages, setMessages] = useState<Partial<Message>[]>([])
   const [input, setInput] = useState('')
   const [isAskLoading, setIsAskLoading] = useState(false)
-  const [aiModel, setAIModel] = useState<"deepseek/deepseek-v3/community" | "deepseek/deepseek-r1/community">("deepseek/deepseek-v3/community")
+  const [aiModel, setAIModel] = useState<'deepseek/deepseek-v3/community' | 'deepseek/deepseek-r1/community'>(
+    'deepseek/deepseek-v3/community',
+  )
+  const [isLogined, setIsLogined] = useState<boolean | null>(null)
 
   const subscriptionRef1 = useRef<any>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -84,9 +89,20 @@ export default function BalancePaymentFeature() {
   }, [program, publicKey])
 
   useEffect(() => {
+    if (publicKey) {
+      const authData = getAuthData()
+      if (authData === null) {
+        setIsLogined(false)
+      } else {
+        setIsLogined(true)
+      }
+    }
+  }, [publicKey])
+
+  useEffect(() => {
     ;(async () => {
-      if (publicKey) {
-        const userInfoWrapper = await getUser(publicKey.toString())
+      if (publicKey && isLogined) {
+        const userInfoWrapper = await getUser()
         if (userInfoWrapper.error) {
           toast.error(`get user failed, ${userInfoWrapper.error}`)
           return
@@ -98,11 +114,11 @@ export default function BalancePaymentFeature() {
         setUserInfo(userInfoWrapper.data)
       }
     })()
-  }, [publicKey])
+  }, [publicKey, isLogined])
 
   useEffect(() => {
     ;(async () => {
-      if (selectedTab === 'chat' && publicKey) {
+      if (selectedTab === 'chat' && publicKey && isLogined) {
         if (conversationId) {
           const messagesWrapper = await getMessages(conversationId)
           if (messagesWrapper.error) {
@@ -115,8 +131,7 @@ export default function BalancePaymentFeature() {
           }
           setMessages(messagesWrapper.data)
         } else {
-          const userPubkey = publicKey.toString()
-          const convosWrapper = await getConversations(userPubkey)
+          const convosWrapper = await getConversations()
           if (convosWrapper.error) {
             toast.error(`get conversations failed, ${convosWrapper.error}`)
             return
@@ -127,7 +142,7 @@ export default function BalancePaymentFeature() {
           }
           setConversations(convosWrapper.data)
           if (convosWrapper.data.length == 0) {
-            const createWrapper = await createConversation(userPubkey)
+            const createWrapper = await createConversation()
             if (createWrapper.error) {
               toast.error(`create conversations failed, ${createWrapper.error}`)
               return
@@ -143,7 +158,7 @@ export default function BalancePaymentFeature() {
         }
       }
     })()
-  }, [selectedTab, publicKey, conversationId])
+  }, [selectedTab, publicKey, isLogined, conversationId])
 
   useEffect(() => {
     if (publicKey) {
@@ -333,12 +348,29 @@ export default function BalancePaymentFeature() {
     }
   }
 
+  const handleLogin = async () => {
+    if (!wallet || !publicKey || !signMessage) {
+      console.error('Wallet not connected or serial number not generated')
+      return
+    }
+    const message = 'DePhy sign in:'
+    const digest = new TextEncoder().encode(message)
+
+    const signature = await signMessage(digest)
+
+    const signatureBase64 = Buffer.from(signature).toString('base64');
+
+    const res = await login(publicKey.toString(), message, signatureBase64)
+
+    console.log('login res:', res)
+  }
+
   const handleNewConversation = async () => {
     if (!publicKey) {
       console.error('Wallet not connected')
       return
     }
-    const convoWrapper = await createConversation(publicKey.toString())
+    const convoWrapper = await createConversation()
     if (convoWrapper.error) {
       toast.error(`create conversation failed, ${convoWrapper.error}`)
       return
@@ -357,10 +389,10 @@ export default function BalancePaymentFeature() {
   }
 
   const handleDeepThink = () => {
-    if(aiModel === "deepseek/deepseek-v3/community") {
-      setAIModel("deepseek/deepseek-r1/community")
+    if (aiModel === 'deepseek/deepseek-v3/community') {
+      setAIModel('deepseek/deepseek-r1/community')
     } else {
-      setAIModel("deepseek/deepseek-v3/community")
+      setAIModel('deepseek/deepseek-v3/community')
     }
   }
 
@@ -607,27 +639,37 @@ export default function BalancePaymentFeature() {
 
   return publicKey ? (
     <div className="max-w-4xl mx-auto p-4">
-      {/* Tab */}
-      <div className="inline-flex p-1 bg-gray-100 rounded-full mb-8">
+      <div className="flex justify-between items-center mb-8">
+        {/* Tab */}
+        <div className="inline-flex p-1 bg-gray-100 rounded-full">
+          <button
+            className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
+              selectedTab === 'payment' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            } ${isTabDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={() => handleSelectTab('payment')}
+            disabled={isTabDisabled}
+          >
+            Payment
+            {selectedTab === 'payment' && isTabDisabled && <span className="ml-2 animate-pulse">(Processing...)</span>}
+          </button>
+          <button
+            className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
+              selectedTab === 'chat' ? 'bg-white text-pink-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            } ${isTabDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={() => handleSelectTab('chat')}
+            disabled={isTabDisabled}
+          >
+            Chat
+            {selectedTab === 'chat' && isTabDisabled && <span className="ml-2 animate-pulse">(Processing...)</span>}
+          </button>
+        </div>
+
+        {/* Login Button */}
         <button
-          className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
-            selectedTab === 'payment' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          } ${isTabDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-          onClick={() => handleSelectTab('payment')}
-          disabled={isTabDisabled}
+          className="px-6 py-2 rounded-full text-sm font-medium transition-all duration-300 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          onClick={handleLogin} // 假设你有一个 handleLogin 函数
         >
-          Payment
-          {selectedTab === 'payment' && isTabDisabled && <span className="ml-2 animate-pulse">(Processing...)</span>}
-        </button>
-        <button
-          className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
-            selectedTab === 'chat' ? 'bg-white text-pink-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          } ${isTabDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-          onClick={() => handleSelectTab('chat')}
-          disabled={isTabDisabled}
-        >
-          Chat
-          {selectedTab === 'chat' && isTabDisabled && <span className="ml-2 animate-pulse">(Processing...)</span>}
+          Login
         </button>
       </div>
 
@@ -821,7 +863,8 @@ export default function BalancePaymentFeature() {
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors 
                       ${aiModel === 'deepseek/deepseek-r1/community' ? 'bg-pink-500' : 'bg-gray-300'}`}
                   >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform
                       ${aiModel === 'deepseek/deepseek-r1/community' ? 'translate-x-6' : 'translate-x-1'}`}
                     />
                   </button>

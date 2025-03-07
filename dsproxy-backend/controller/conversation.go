@@ -19,16 +19,13 @@ func NewConversationController(logic *logic.ConversationLogic) *ConversationCont
 
 // CreateConversation handles POST /conversations
 func (c *ConversationController) CreateConversation(ctx *gin.Context) {
-	type Request struct {
-		UserPubkey string `json:"user_pubkey" binding:"required"`
-	}
-	var req Request
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+	userPubkey, err := extractUserPubkey(ctx)
+	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	convo, err := c.convoLogic.CreateConversation(req.UserPubkey)
+	convo, err := c.convoLogic.CreateConversation(userPubkey)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -39,16 +36,13 @@ func (c *ConversationController) CreateConversation(ctx *gin.Context) {
 
 // GetConversations handles GET /conversations
 func (c *ConversationController) GetConversations(ctx *gin.Context) {
-    type Query struct {
-        UserPubkey string `form:"user_pubkey" binding:"required"`
-    }
-    var qry Query
-    if err := ctx.ShouldBindQuery(&qry); err != nil {
-        ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
+	userPubkey, err := extractUserPubkey(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-    conversations, err := c.convoLogic.GetConversations(qry.UserPubkey)
+    conversations, err := c.convoLogic.GetConversations(userPubkey)
     if err != nil {
         ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
         return

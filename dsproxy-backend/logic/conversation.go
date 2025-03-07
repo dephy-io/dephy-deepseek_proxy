@@ -4,6 +4,7 @@ import (
 	"dsproxy-backend/dao"
 	"dsproxy-backend/models"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -43,7 +44,6 @@ func (l *ConversationLogic) CreateConversation(publicKey string) (*models.Conver
 
 // GetConversations retrieves all conversations for a user by public key
 func (l *ConversationLogic) GetConversations(publicKey string) ([]models.Conversation, error) {
-	// Optional: Verify user exists
 	_, err := l.userDAO.GetUserByPublicKey(publicKey)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -53,4 +53,14 @@ func (l *ConversationLogic) GetConversations(publicKey string) ([]models.Convers
 	}
 
 	return l.convoDAO.GetConversationsByUserPubkey(publicKey)
+}
+
+// GetConversationByID retrieves conversation by uuid
+func (l *ConversationLogic) GetConversationByID(conversationID uuid.UUID) (*models.Conversation, error) {
+	// Get the user associated with the conversation
+	conversation, err := l.convoDAO.GetConversationByID(conversationID)
+	if err != nil {
+		return nil, err
+	}
+	return conversation, nil
 }
