@@ -353,7 +353,7 @@ export default function BalancePaymentFeature() {
       console.error('Wallet not connected or serial number not generated')
       return
     }
-    const message = 'DePhy sign in:'
+    const message = 'DePhy request to sign in'
     const digest = new TextEncoder().encode(message)
 
     const signature = await signMessage(digest)
@@ -363,6 +363,8 @@ export default function BalancePaymentFeature() {
     const res = await login(publicKey.toString(), message, signatureBase64)
 
     console.log('login res:', res)
+
+    setIsLogined(true)
   }
 
   const handleNewConversation = async () => {
@@ -666,8 +668,9 @@ export default function BalancePaymentFeature() {
 
         {/* Login Button */}
         <button
-          className="px-6 py-2 rounded-full text-sm font-medium transition-all duration-300 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          className="btn px-8 py-2 rounded-full text-sm font-medium transition-all duration-300 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           onClick={handleLogin} // 假设你有一个 handleLogin 函数
+          disabled={isLogined === true}
         >
           Login
         </button>
