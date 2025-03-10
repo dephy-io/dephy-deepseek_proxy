@@ -101,23 +101,6 @@ export default function BalancePaymentFeature() {
 
   useEffect(() => {
     ;(async () => {
-      if (publicKey && isLogined) {
-        const userInfoWrapper = await getUser()
-        if (userInfoWrapper.error) {
-          toast.error(`get user failed, ${userInfoWrapper.error}`)
-          return
-        }
-        if (!userInfoWrapper.data) {
-          toast.error('get user result undefined')
-          return
-        }
-        setUserInfo(userInfoWrapper.data)
-      }
-    })()
-  }, [publicKey, isLogined])
-
-  useEffect(() => {
-    ;(async () => {
       if (selectedTab === 'chat' && publicKey && isLogined) {
         if (conversationId) {
           const messagesWrapper = await getMessages(conversationId)
@@ -161,12 +144,20 @@ export default function BalancePaymentFeature() {
   }, [selectedTab, publicKey, isLogined, conversationId])
 
   useEffect(() => {
-    if (publicKey) {
+    if (publicKey && selectedTab === "payment") {
       const intervalId = setInterval(fetchUserAccount, 3000)
 
       return () => clearInterval(intervalId)
     }
-  }, [publicKey])
+  }, [publicKey, selectedTab])
+
+  useEffect(() => {
+    if (publicKey && isLogined && selectedTab === "payment") {
+      const intervalId = setInterval(fetchUser, 3000)
+
+      return () => clearInterval(intervalId)
+    }
+  }, [publicKey, isLogined, selectedTab])
 
   useEffect(() => {
     ;(async () => {
@@ -298,6 +289,22 @@ export default function BalancePaymentFeature() {
     setUserAccount(user)
   }
 
+  const fetchUser = async () => {
+    if (!publicKey || isLogined !== true) {
+      return
+    }
+    const userInfoWrapper = await getUser()
+    if (userInfoWrapper.error) {
+      toast.error(`get user failed, ${userInfoWrapper.error}`)
+      return
+    }
+    if (!userInfoWrapper.data) {
+      toast.error('get user result undefined')
+      return
+    }
+    setUserInfo(userInfoWrapper.data)
+  }
+
   const handleCharge = async () => {
     if (!wallet || !publicKey || !signMessage || !serialNumberBytes) {
       console.error('Wallet not connected or serial number not generated')
@@ -358,7 +365,7 @@ export default function BalancePaymentFeature() {
 
     const signature = await signMessage(digest)
 
-    const signatureBase64 = Buffer.from(signature).toString('base64');
+    const signatureBase64 = Buffer.from(signature).toString('base64')
 
     const res = await login(publicKey.toString(), message, signatureBase64)
 

@@ -53,7 +53,7 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 	}
 
 	// Check available context and user tokens
-	remainingContextTokens := uint64(config.GlobalConfig.Chat.MaxContextTokens) - conversation.TotalTokens
+	remainingContextTokens := int64(uint64(config.GlobalConfig.Chat.MaxContextTokens) - conversation.TotalTokens)
 	if remainingContextTokens < 1 {
 		return nil, errors.New("conversation context limit exceeded")
 	}
@@ -65,7 +65,7 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 
 	// Calculate max_tokens: min(remaining context, user tokens)
 	maxTokens := uint32(remainingContextTokens)
-	if user.Tokens < remainingContextTokens {
+	if user.Tokens < uint64(remainingContextTokens) {
 		maxTokens = uint32(user.Tokens)
 	}
 
