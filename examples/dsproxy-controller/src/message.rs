@@ -35,7 +35,7 @@ pub enum DephyDsProxyMessage {
     },
     Transaction {
         user: String,
-        lamports: u64,
+        tokens: i64,
     },
 }
 

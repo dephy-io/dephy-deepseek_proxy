@@ -17,6 +17,7 @@ use crate::relay_client::extract_mention;
 use crate::RelayClient;
 
 const PAY_AMOUNT: u64 = 5_000_000;
+const TOKENS_LAMPORTS_RATIO: i64 = 1;
 
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -352,12 +353,14 @@ impl MessageHandler {
                     )
                     .await?;
 
+                let tokens = PAY_AMOUNT as i64 * TOKENS_LAMPORTS_RATIO;
+
                 self.client
                     .send_event(
                         mention,
                         &DephyDsProxyMessage::Transaction {                           
                             user: parsed_payload.user.clone(),
-                            lamports: PAY_AMOUNT
+                            tokens
                         },
                     )
                     .await?;

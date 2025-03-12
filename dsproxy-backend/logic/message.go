@@ -1,7 +1,10 @@
 package logic
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 
 	"dsproxy-backend/config"
@@ -10,14 +13,16 @@ import (
 	"dsproxy-backend/pkg"
 
 	"github.com/google/uuid"
+	"github.com/nbd-wtf/go-nostr"
 )
 
 // MessageLogic handles message-related business logic
 type MessageLogic struct {
-	userDAO    *dao.UserDAO
-	convoDAO   *dao.ConversationDAO
-	messageDAO *dao.MessageDAO
-	chatClient *pkg.ChatClient
+	userDAO     *dao.UserDAO
+	convoDAO    *dao.ConversationDAO
+	messageDAO  *dao.MessageDAO
+	chatClient  *pkg.ChatClient
+	nostrClient *pkg.NostrClient
 }
 
 func NewMessageLogic(
@@ -25,12 +30,14 @@ func NewMessageLogic(
 	convoDAO *dao.ConversationDAO,
 	messageDAO *dao.MessageDAO,
 	chatClient *pkg.ChatClient,
+	nostrClient *pkg.NostrClient,
 ) *MessageLogic {
 	return &MessageLogic{
-		userDAO:    userDAO,
-		convoDAO:   convoDAO,
-		messageDAO: messageDAO,
-		chatClient: chatClient,
+		userDAO:     userDAO,
+		convoDAO:    convoDAO,
+		messageDAO:  messageDAO,
+		chatClient:  chatClient,
+		nostrClient: nostrClient,
 	}
 }
 
@@ -134,10 +141,8 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 	}
 
 	// Update user's consumed tokens (approximation based on response length)
-	consumedTokens := uint64(len(fullResponse))
-	if err := l.userDAO.UpdateUserTokens(user.PublicKey, -int64(consumedTokens), int64(consumedTokens)); err != nil {
-		log.Printf("Failed to update user tokens: %v", err)
-	}
+	// handle by nostr event listener
+	l.PublishTransactionEvent(context.Background(), user.PublicKey, -int64(finalUsage.TotalTokens))
 
 	// Update conversation's TotalTokens
 	newTotalTokens := conversation.TotalTokens + uint64(finalUsage.TotalTokens)
@@ -151,4 +156,41 @@ func (l *MessageLogic) AddMessageAndCallChat(conversationID uuid.UUID, model str
 // GetConversationMessages retrieves all messages in a conversation
 func (l *MessageLogic) GetConversationMessages(conversationID uuid.UUID) ([]models.Message, error) {
 	return l.messageDAO.GetMessagesByConversationID(conversationID)
+}
+
+// PublishTransactionEvent publishes a new Transaction event to Nostr Relay
+func (l *MessageLogic) PublishTransactionEvent(ctx context.Context, user string, tokens int64) error {
+	event := nostr.Event{
+		PubKey:    l.nostrClient.MachinePubkey,
+		CreatedAt: nostr.Now(),
+		Kind:      1573,
+		Tags: nostr.Tags{
+			nostr.Tag{"s", l.nostrClient.Session},
+			nostr.Tag{"p", l.nostrClient.MachinePubkey},
+		},
+	}
+
+	transaction := pkg.TransactionPayload{
+		User:   user,
+		Tokens: tokens,
+	}
+	msg := pkg.DephyDsProxyMessage{
+		Transaction: &transaction,
+	}
+
+	content, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal transaction message: %v", err)
+	}
+	event.Content = string(content)
+
+	if err := event.Sign(l.nostrClient.SecretKey); err != nil {
+		return fmt.Errorf("failed to sign event: %v", err)
+	}
+
+	if err := l.nostrClient.Relay.Publish(ctx, event); err != nil {
+		return fmt.Errorf("failed to publish event: %v", err)
+	}
+
+	return nil
 }

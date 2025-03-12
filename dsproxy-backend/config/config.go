@@ -26,6 +26,7 @@ type Config struct {
 		Session       string `yaml:"session"`
 		RelayURL      string `yaml:"relay_url"`
 		MachinePubkey string `yaml:"machine_pubkey"`
+		SecretKey     string `yaml:"secret_key"`
 	} `yaml:"nostr"`
 	Chat struct {
 		APIKey           string `yaml:"api_key"`

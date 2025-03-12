@@ -14,6 +14,7 @@ nostr:
   session: "dephy-dsproxy-controller"
   relay_url: "ws://127.0.0.1:8000"
   machine_pubkey: "d041ea9854f2117b82452457c4e6d6593a96524027cd4032d2f40046deb78d93"
+  secret_key: "f2bc0ed3728370f3291ba09f13c3b5d493c4d6bb979ea8e752a33c1031b4dab6"
 
 chat:
   api_key: "api_key"

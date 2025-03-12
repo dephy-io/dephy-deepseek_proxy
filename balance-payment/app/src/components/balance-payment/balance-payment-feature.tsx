@@ -6,7 +6,7 @@ import { BN } from '@coral-xyz/anchor'
 import keccak from 'keccak'
 import { useTransactionToast } from '../ui/ui-layout'
 import toast from 'react-hot-toast'
-import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure'
+import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import { Relay } from 'nostr-tools/relay'
 import bs58 from 'bs58'
 import ReactMarkdown from 'react-markdown'
@@ -162,6 +162,10 @@ export default function BalancePaymentFeature() {
   useEffect(() => {
     ;(async () => {
       const sk = generateSecretKey()
+      const skHex = Buffer.from(sk).toString('hex');
+      console.log("sk (hex string):", skHex);
+      const pk = getPublicKey(sk); // getPublicKey 直接返回十六进制字符串
+      console.log("pk (hex string):", pk);
       setSk(sk)
 
       try {

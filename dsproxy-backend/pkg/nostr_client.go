@@ -90,17 +90,18 @@ type StatusPayload struct {
 }
 
 type TransactionPayload struct {
-	User     string `json:"user"`
-	Lamports uint64 `json:"lamports"`
+	User   string `json:"user"`
+	Tokens int64  `json:"tokens"`
 }
 
 type NostrClient struct {
 	Relay         *nostr.Relay
 	Session       string
 	MachinePubkey string
+	SecretKey     string
 }
 
-func NewNostrClient(relayURL, session, machinePubkey string) (*NostrClient, error) {
+func NewNostrClient(relayURL, session, machinePubkey, secretKey string) (*NostrClient, error) {
 	ctx := context.Background()
 	relay, err := nostr.RelayConnect(ctx, relayURL)
 	if err != nil {
@@ -111,10 +112,10 @@ func NewNostrClient(relayURL, session, machinePubkey string) (*NostrClient, erro
 		Relay:         relay,
 		Session:       session,
 		MachinePubkey: machinePubkey,
+		SecretKey:     secretKey,
 	}, nil
 }
 
-// Close 关闭客户端连接
 func (c *NostrClient) Close() {
 	c.Relay.Close()
 }

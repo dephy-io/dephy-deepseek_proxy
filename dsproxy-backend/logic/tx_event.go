@@ -43,7 +43,7 @@ func (l *TxEventLogic) StartNostrListener(ctx context.Context) error {
 
 	log.Printf("Nostr events subscribe since: %v", latestCreatedAt)
 
-	since := nostr.Timestamp(latestCreatedAt+1)
+	since := nostr.Timestamp(latestCreatedAt + 1)
 
 	filters := nostr.Filters{{
 		Kinds: []int{1573},
@@ -80,19 +80,22 @@ func (l *TxEventLogic) StartNostrListener(ctx context.Context) error {
 				txEvent := &models.TransactionEvent{
 					ID:        ev.ID,
 					User:      msg.Transaction.User,
-					Lamports:  msg.Transaction.Lamports,
+					Tokens:    msg.Transaction.Tokens,
 					CreatedAt: time.Unix(int64(ev.CreatedAt), 0),
 				}
 				if err := l.txEventDAO.SaveTransactionEvent(txEvent); err != nil {
 					log.Printf("Failed to save Transaction event: %v", err)
 				}
 
-				// Update user tokens (1 Lamport = 1 Token)
-				err := l.userDAO.UpdateUserTokens(msg.Transaction.User, int64(msg.Transaction.Lamports), 0)
+				if msg.Transaction.Tokens >= 0 {
+					err = l.userDAO.UpdateUserTokens(msg.Transaction.User, msg.Transaction.Tokens, 0)
+				} else {
+					err = l.userDAO.UpdateUserTokens(msg.Transaction.User, msg.Transaction.Tokens, -msg.Transaction.Tokens)
+				}
 				if err != nil {
 					log.Printf("Failed to update user tokens: %v", err)
 				} else {
-					log.Printf("Updated tokens for user %s: +%d", msg.Transaction.User, msg.Transaction.Lamports)
+					log.Printf("Updated tokens for user %s: +%d", msg.Transaction.User, msg.Transaction.Tokens)
 				}
 			}
 		case <-sub.EndOfStoredEvents:

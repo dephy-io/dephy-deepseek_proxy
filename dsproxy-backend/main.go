@@ -36,7 +36,12 @@ func main() {
 	db.AutoMigrate(&models.User{}, &models.Conversation{}, &models.Message{}, &models.TransactionEvent{})
 
 	// Initialize Nostr client (placeholder, use real implementation)
-	nostrClient, err := pkg.NewNostrClient(config.GlobalConfig.Nostr.RelayURL, config.GlobalConfig.Nostr.Session, config.GlobalConfig.Nostr.MachinePubkey)
+	nostrClient, err := pkg.NewNostrClient(
+		config.GlobalConfig.Nostr.RelayURL, 
+		config.GlobalConfig.Nostr.Session, 
+		config.GlobalConfig.Nostr.MachinePubkey, 
+		config.GlobalConfig.Nostr.SecretKey,
+	)
 	if err != nil {
 		log.Fatalf("Failed to initialize Nostr client: %v", err)
 	}
@@ -53,7 +58,7 @@ func main() {
 	// Initialize Logics
 	userLogic := logic.NewUserLogic(userDAO)
 	convoLogic := logic.NewConversationLogic(userDAO, convoDAO)
-	messageLogic := logic.NewMessageLogic(userDAO, convoDAO, messageDAO, chatClient)
+	messageLogic := logic.NewMessageLogic(userDAO, convoDAO, messageDAO, chatClient, nostrClient)
 	txEventLogic := logic.NewTxEventLogic(userDAO, txEventDAO, nostrClient)
 
 	// Initialize Controllers
