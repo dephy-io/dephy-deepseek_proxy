@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "balance-payment-sdk",
-    "examples/*",
+    "dsproxy-controller",
 ]
 
 [workspace.package]
