@@ -70,6 +70,10 @@ Initializes the program with an authority, treasury, and bot.
 ```bash
 anchor run cli -- initialize --authority <AUTHORITY_PUBKEY> --treasury <TREASURY_PUBKEY> --bot 9nyhqLqmbWoUuNXA1XCVnEqiS9UWvxFYa1yynVVFzR4D
 ```
+e.g
+```bash
+anchor run cli -- initialize --authority 9nyhqLqmbWoUuNXA1XCVnEqiS9UWvxFYa1yynVVFzR4D --treasury 9nyhqLqmbWoUuNXA1XCVnEqiS9UWvxFYa1yynVVFzR4D --bot 9nyhqLqmbWoUuNXA1XCVnEqiS9UWvxFYa1yynVVFzR4D
+```
 
 - `--authority`: The public key of the authority.
 - `--treasury`: The public key of the treasury account.

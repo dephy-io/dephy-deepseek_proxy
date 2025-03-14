@@ -12,6 +12,7 @@ import (
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/mr-tron/base58"
+	"gorm.io/gorm"
 )
 
 // UserLogic handles user-related business logic
@@ -70,15 +71,14 @@ func (l *UserLogic) Login(userPubkey, message, signature string) (*models.User, 
 	}
 
 	user, err := l.userDAO.GetUserByPublicKey(userPubkey)
-	if err != nil {
-		return nil, "", time.Time{}, err
-	}
-
-	if user == nil {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		user, err = l.userDAO.CreateUser(userPubkey)
 		if err != nil {
 			return nil, "", time.Time{}, err
 		}
+	}
+	if err != nil {
+		return nil, "", time.Time{}, err
 	}
 
 	token, expireAt, err := l.generateJWT(userPubkey)

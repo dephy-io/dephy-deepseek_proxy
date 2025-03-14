@@ -4,9 +4,9 @@ auth:
 
 database:
   host: "localhost"
-  user: "postgres"
-  password: "your_password"
-  dbname: "your_db"
+  user: "dephy"
+  password: "dephy"
+  dbname: "dephy_backend"
   port: "5432"
   sslmode: "disable"
 
