@@ -622,6 +622,7 @@ export default function BalancePaymentFeature() {
         const content = JSON.parse(event.content)
         if (content.Request) return `${eventType} Request`
         if (content.Status) return `${eventType} Status: ${content.Status.status}`
+        if (content.Transaction) return `${eventType} Transaction emit`
       } catch {
         return 'Invalid Event'
       }
