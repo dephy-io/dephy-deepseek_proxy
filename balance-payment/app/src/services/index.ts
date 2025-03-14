@@ -49,8 +49,8 @@ export const getAuthData = (): LoginResponse | null => {
     const data = JSON.parse(authData) as LoginResponse;
     const expireAt = new Date(data.expire_at);
     if (isNaN(expireAt.getTime()) || expireAt <= new Date()) {
-        // Token 已过期，清除本地存储
-        localStorage.removeItem(AUTH_DATA_KEY);
+        // Token is expired, clean local storage
+        clearAuthData();
         return null;
     }
 
@@ -59,6 +59,10 @@ export const getAuthData = (): LoginResponse | null => {
 
 const setAuthData = (data: LoginResponse) => {
     localStorage.setItem(AUTH_DATA_KEY, JSON.stringify(data));
+};
+
+const clearAuthData = () => {
+    localStorage.removeItem(AUTH_DATA_KEY);
 };
 
 export async function login(
@@ -85,7 +89,10 @@ export async function login(
     }
 }
 
-// 获取用户 (GET /user)
+export function logout() {
+    clearAuthData();
+}
+
 export async function getUser(): Promise<ApiResponse<User>> {
     try {
         const authData = getAuthData();
@@ -110,7 +117,6 @@ export async function getUser(): Promise<ApiResponse<User>> {
     }
 }
 
-// 创建会话 (POST /conversations)
 export async function createConversation(): Promise<ApiResponse<Conversation>> {
     try {
         const authData = getAuthData();
@@ -124,7 +130,6 @@ export async function createConversation(): Promise<ApiResponse<Conversation>> {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${authData.token}`,
             },
-            // 假设后端从 token 中提取 user_pubkey
             body: JSON.stringify({}),
         });
         const data = await response.json();
@@ -137,7 +142,6 @@ export async function createConversation(): Promise<ApiResponse<Conversation>> {
     }
 }
 
-// 获取会话列表 (GET /conversations)
 export async function getConversations(): Promise<ApiResponse<Conversation[]>> {
     try {
         const authData = getAuthData();
@@ -162,7 +166,6 @@ export async function getConversations(): Promise<ApiResponse<Conversation[]>> {
     }
 }
 
-// 添加消息 (POST /messages)，支持自定义 UI 处理函数
 export async function addMessage(
     conversationId: string,
     content: string,
@@ -223,7 +226,6 @@ export async function addMessage(
     }
 }
 
-// 获取消息列表 (GET /messages)
 export async function getMessages(conversationId: string): Promise<ApiResponse<Message[]>> {
     try {
         const authData = getAuthData();

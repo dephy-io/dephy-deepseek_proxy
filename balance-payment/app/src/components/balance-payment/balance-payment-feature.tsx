@@ -19,6 +19,7 @@ import {
   getMessages,
   getUser,
   login,
+  logout,
   Message,
   User,
 } from '@/services'
@@ -144,7 +145,7 @@ export default function BalancePaymentFeature() {
   }, [selectedTab, publicKey, isLogined, conversationId])
 
   useEffect(() => {
-    if (publicKey && selectedTab === "payment") {
+    if (publicKey && selectedTab === 'payment') {
       const intervalId = setInterval(fetchUserAccount, 3000)
 
       return () => clearInterval(intervalId)
@@ -152,7 +153,7 @@ export default function BalancePaymentFeature() {
   }, [publicKey, selectedTab])
 
   useEffect(() => {
-    if (publicKey && isLogined && selectedTab === "payment") {
+    if (publicKey && isLogined && selectedTab === 'payment') {
       const intervalId = setInterval(fetchUser, 3000)
 
       return () => clearInterval(intervalId)
@@ -162,10 +163,10 @@ export default function BalancePaymentFeature() {
   useEffect(() => {
     ;(async () => {
       const sk = generateSecretKey()
-      const skHex = Buffer.from(sk).toString('hex');
-      console.log("sk (hex string):", skHex);
-      const pk = getPublicKey(sk); // getPublicKey 直接返回十六进制字符串
-      console.log("pk (hex string):", pk);
+      const skHex = Buffer.from(sk).toString('hex')
+      console.log('sk (hex string):', skHex)
+      const pk = getPublicKey(sk)
+      console.log('pk (hex string):', pk)
       setSk(sk)
 
       try {
@@ -364,18 +365,23 @@ export default function BalancePaymentFeature() {
       console.error('Wallet not connected or serial number not generated')
       return
     }
-    const message = 'DePhy request to sign in'
-    const digest = new TextEncoder().encode(message)
+    if (!isLogined) {
+      const message = 'DePhy request to sign in'
+      const digest = new TextEncoder().encode(message)
 
-    const signature = await signMessage(digest)
+      const signature = await signMessage(digest)
 
-    const signatureBase64 = Buffer.from(signature).toString('base64')
+      const signatureBase64 = Buffer.from(signature).toString('base64')
 
-    const res = await login(publicKey.toString(), message, signatureBase64)
+      const res = await login(publicKey.toString(), message, signatureBase64)
 
-    console.log('login res:', res)
+      console.log('login res:', res)
 
-    setIsLogined(true)
+      setIsLogined(true)
+    } else {
+      logout()
+      setIsLogined(false)
+    }
   }
 
   const handleNewConversation = async () => {
@@ -429,16 +435,14 @@ export default function BalancePaymentFeature() {
         const newMessages = [...prev]
         const lastIndex = newMessages.length - 1
 
-        // 防御性检查
         if (lastIndex < 0) return prev
 
         const lastMessage = newMessages[lastIndex]
 
-        // 必须创建新对象保证不可变性
         if (lastMessage.role === 'assistant') {
           newMessages[lastIndex] = {
-            ...lastMessage, // 展开原有属性
-            content: lastMessage.content + newContent, // 创建新字符串
+            ...lastMessage,
+            content: lastMessage.content + newContent,
           }
         }
 
@@ -678,13 +682,14 @@ export default function BalancePaymentFeature() {
           </button>
         </div>
 
-        {/* Login Button */}
+        {/* Login | Logout Button */}
         <button
-          className="btn px-8 py-2 rounded-full text-sm font-medium transition-all duration-300 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          onClick={handleLogin} // 假设你有一个 handleLogin 函数
-          disabled={isLogined === true}
+          className={`btn px-8 py-2 rounded-full text-sm font-medium transition-all duration-300 
+  ${isLogined ? 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500' : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'} 
+  text-white focus:outline-none focus:ring-2 focus:ring-offset-2`}
+          onClick={handleLogin}
         >
-          Login
+          {isLogined ? 'Logout' : 'Login'}
         </button>
       </div>
 
@@ -791,7 +796,7 @@ export default function BalancePaymentFeature() {
         </>
       ) : (
         <div className="w-full h-[70vh] flex">
-          {/* 左侧对话列表 */}
+          {/* Left: Conversations List */}
           <div className="w-44 border-r p-4 overflow-auto flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <button
@@ -828,9 +833,8 @@ export default function BalancePaymentFeature() {
             </div>
           </div>
 
-          {/* 右侧聊天区域 */}
+          {/* Right: Chat messages */}
           <div className="flex-1 min-w-[700px] p-4 flex flex-col">
-            {/* 消息列表 */}
             <div className="flex-1 overflow-auto space-y-4" ref={messagesContainerRef}>
               {messages.map((msg, index) => {
                 const parts = msg.content!.split(/<think>(.*?)<\/think>/gs)
@@ -855,13 +859,14 @@ export default function BalancePaymentFeature() {
               })}
             </div>
 
-            {/* 输入框和按钮 */}
+            {/* Input and button*/}
             <div className="mt-4 border-t pt-2">
-              {/* 第一行：输入框 */}
+              {/* line 1: input */}
               <div className="mb-2 w-full">
                 <input
                   type="text"
                   value={input}
+                  disabled={conversationId === null}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
                   className="w-full p-2 border rounded-lg"
@@ -869,9 +874,9 @@ export default function BalancePaymentFeature() {
                 />
               </div>
 
-              {/* 第二行：操作按钮组 */}
+              {/* line 2: button list */}
               <div className="flex justify-end items-center gap-4">
-                {/* 模型切换标签 */}
+                {/* model switch */}
                 <div className="flex items-center">
                   <button
                     onClick={handleDeepThink}
@@ -886,11 +891,11 @@ export default function BalancePaymentFeature() {
                   <span className="ml-2 text-sm text-gray-600">DeepThink</span>
                 </div>
 
-                {/* Ask按钮 */}
+                {/* Ask button */}
                 <button
                   onClick={handleAsk}
                   className="px-4 py-2 bg-pink-500 text-white rounded-lg flex items-center justify-center gap-2"
-                  disabled={isAskLoading}
+                  disabled={isAskLoading || conversationId === null}
                 >
                   {isAskLoading ? (
                     <svg
