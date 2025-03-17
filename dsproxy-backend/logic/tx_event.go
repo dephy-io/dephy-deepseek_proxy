@@ -95,7 +95,11 @@ func (l *TxEventLogic) StartNostrListener(ctx context.Context) error {
 				if err != nil {
 					log.Printf("Failed to update user tokens: %v", err)
 				} else {
-					log.Printf("Updated tokens for user %s: +%d", msg.Transaction.User, msg.Transaction.Tokens)
+					fmtMsg := "Updated tokens for user %s: +%d"
+					if  msg.Transaction.Tokens < 0 {
+						fmtMsg = "Updated tokens for user %s: %d"
+					}
+					log.Printf(fmtMsg, msg.Transaction.User, msg.Transaction.Tokens)
 				}
 			}
 		case <-sub.EndOfStoredEvents:

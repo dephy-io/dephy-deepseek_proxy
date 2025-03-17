@@ -63,7 +63,7 @@ export default function BalancePaymentFeature() {
   )
   const [isLogined, setIsLogined] = useState<boolean | null>(null)
 
-  const subscriptionRef1 = useRef<any>(null)
+  const subscriptionRef = useRef<any>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -178,6 +178,20 @@ export default function BalancePaymentFeature() {
       }
     })()
   }, [])
+
+  useEffect(() => {
+    if (!relay || !sk) return; // Wait until everything is ready
+  
+    listenFromRelay();
+  
+    // Cleanup subscription on unmount or when dependencies change
+    return () => {
+      if (subscriptionRef.current) {
+        subscriptionRef.current.close();
+        subscriptionRef.current = null;
+      }
+    };
+  }, [relay, sk]); // Dependencies that affect the subscription  
 
   const solToLamports = (sol: string): BN => {
     const solNumber = parseFloat(sol)
@@ -349,14 +363,6 @@ export default function BalancePaymentFeature() {
     } catch (error) {
       toast.error(`Error publishing to relay: ${error}`)
       setIsChargeDisabled(false)
-      return
-    }
-
-    try {
-      await listenFromRelay()
-    } catch (error) {
-      toast.error(`Error listening from relay: ${error}`)
-      setIsChargeDisabled(false)
     }
   }
 
@@ -432,6 +438,7 @@ export default function BalancePaymentFeature() {
     setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
     await addMessage(conversationId, input, aiModel, async (newContent: string) => {
       setMessages((prev) => {
+        console.log(newContent)
         const newMessages = [...prev]
         const lastIndex = newMessages.length - 1
 
@@ -506,12 +513,12 @@ export default function BalancePaymentFeature() {
     const sTag = 'dephy-dsproxy-controller'
 
     // clear old subscription
-    if (subscriptionRef1.current) {
-      subscriptionRef1.current.close()
+    if (subscriptionRef.current) {
+      subscriptionRef.current.close()
     }
 
     // create new subscription
-    subscriptionRef1.current = relay.subscribe(
+    subscriptionRef.current = relay.subscribe(
       [
         {
           kinds: [1573],
@@ -535,6 +542,8 @@ export default function BalancePaymentFeature() {
                 setChargeStatus('available')
                 setIsChargeDisabled(false)
               }
+            } else if (content.Transaction) {
+              toast.success(`Tokens ${content.Transaction.tokens}`)
             }
           } catch (error) {
             console.error('Error parsing event content:', error)
@@ -555,9 +564,9 @@ export default function BalancePaymentFeature() {
   // reset status
   const handleReset = () => {
     // clear old subscription
-    if (subscriptionRef1.current) {
-      subscriptionRef1.current.close()
-      subscriptionRef1.current = null
+    if (subscriptionRef.current) {
+      subscriptionRef.current.close()
+      subscriptionRef.current = null
     }
 
     // setRecoverInfo(null)

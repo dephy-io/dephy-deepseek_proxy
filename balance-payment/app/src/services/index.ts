@@ -202,6 +202,7 @@ export async function addMessage(
         }
 
         const decoder = new TextDecoder();
+        let buffer = ""; 
         let fullContent = "";
         let doneMessage: Message | undefined;
 
@@ -209,15 +210,36 @@ export async function addMessage(
             const { done, value } = await reader.read();
             if (done) break;
 
-            const chunk = decoder.decode(value);
-            if (chunk.startsWith("event:done")) {
-                break;
+            buffer += decoder.decode(value, { stream: true });
+
+            // filter SSE Event（divide by \n\n）
+            while (buffer.includes("\n\n")) {
+                const eventEnd = buffer.indexOf("\n\n");
+                const event = buffer.slice(0, eventEnd).trim();
+                buffer = buffer.slice(eventEnd + 2); 
+
+                if (event.startsWith("event:done")) {
+                    const dataMatch = event.match(/data:\s*({.*})/);
+                    if (dataMatch && dataMatch[1]) {
+                        doneMessage = JSON.parse(dataMatch[1]);
+                    }
+                    break;
+                } else if (event.startsWith("event:message")) {
+                    const dataMatch = event.match(/data:\s*({.*})/);
+                    if (dataMatch && dataMatch[1]) {
+                        const sseMsg: SSEMessage = JSON.parse(dataMatch[1]);
+                        const content = sseMsg.content;
+                        fullContent += content;
+                        await handler(content);
+                    } else {
+                        console.error("Invalid message data:", event);
+                    }
+                }
             }
-            const sseMsgStr = chunk.split("event:message\ndata:")[1];
-            const sseMsg: SSEMessage = JSON.parse(sseMsgStr);
-            const content = sseMsg.content;
-            fullContent += content;
-            await handler(content);
+        }
+
+        if (buffer.length > 0) {
+            console.warn("Incomplete data left in buffer:", buffer);
         }
 
         return doneMessage ? { data: doneMessage } : { error: "No message returned" };
