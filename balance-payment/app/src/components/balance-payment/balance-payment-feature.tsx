@@ -180,18 +180,18 @@ export default function BalancePaymentFeature() {
   }, [])
 
   useEffect(() => {
-    if (!relay || !sk) return; // Wait until everything is ready
-  
-    listenFromRelay();
-  
+    if (!relay || !sk) return // Wait until everything is ready
+
+    listenFromRelay()
+
     // Cleanup subscription on unmount or when dependencies change
     return () => {
       if (subscriptionRef.current) {
-        subscriptionRef.current.close();
-        subscriptionRef.current = null;
+        subscriptionRef.current.close()
+        subscriptionRef.current = null
       }
-    };
-  }, [relay, sk]); // Dependencies that affect the subscription  
+    }
+  }, [relay, sk]) // Dependencies that affect the subscription
 
   const solToLamports = (sol: string): BN => {
     const solNumber = parseFloat(sol)
@@ -664,6 +664,58 @@ export default function BalancePaymentFeature() {
     )
   }
 
+  const renderChatMessages = () => {
+    return messages.map((msg, index) => {
+      // Process the content into segments based on <think> and </think>
+      const segments: { text: string; isThinking: boolean }[] = []
+      let currentText = ''
+      let isThinking = false
+
+      for (let i = 0; i < msg.content!.length; i++) {
+        if (msg.content!.startsWith('<think>', i)) {
+          if (currentText) {
+            segments.push({ text: currentText, isThinking })
+            currentText = ''
+          }
+          isThinking = true
+          i += 6 // Skip "<think>"
+        } else if (msg.content!.startsWith('</think>', i)) {
+          if (currentText) {
+            segments.push({ text: currentText, isThinking })
+            currentText = ''
+          }
+          isThinking = false
+          i += 7 // Skip "</think>"
+        } else {
+          currentText += msg.content![i]
+        }
+      }
+
+      // Push any remaining text
+      if (currentText) {
+        segments.push({ text: currentText, isThinking })
+      }
+
+      return (
+        <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div
+            className={`p-3 rounded-lg shadow ${msg.role === 'user' ? 'bg-blue-100' : 'bg-gray-100 max-w-4xl w-full'}`}
+          >
+            {segments.map((segment, i) =>
+              segment.isThinking ? (
+                <span key={i} className="text-xs text-gray-500 block leading-tight mb-2">
+                  {segment.text}
+                </span>
+              ) : (
+                <ReactMarkdown key={i}>{segment.text}</ReactMarkdown>
+              ),
+            )}
+          </div>
+        </div>
+      )
+    })
+  }
+
   return publicKey ? (
     <div className="max-w-4xl mx-auto p-4">
       <div className="flex justify-between items-center mb-8">
@@ -845,27 +897,7 @@ export default function BalancePaymentFeature() {
           {/* Right: Chat messages */}
           <div className="flex-1 min-w-[700px] p-4 flex flex-col">
             <div className="flex-1 overflow-auto space-y-4" ref={messagesContainerRef}>
-              {messages.map((msg, index) => {
-                const parts = msg.content!.split(/<think>(.*?)<\/think>/gs)
-                return (
-                  <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div
-                      className={`p-3 rounded-lg shadow ${msg.role === 'user' ? 'bg-blue-100' : 'bg-gray-100 max-w-4xl w-full'}`}
-                    >
-                      {parts.map((part, i) =>
-                        i % 2 === 0 ? (
-                          <ReactMarkdown key={i}>{part}</ReactMarkdown>
-                        ) : (
-                          <span key={i} className="text-xs text-gray-500 block leading-tight mb-2">
-                            {'>>'}
-                            {part}
-                          </span>
-                        ),
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
+              {renderChatMessages()}
             </div>
 
             {/* Input and button*/}
